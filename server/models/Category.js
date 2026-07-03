@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const   Schema = moongoose.Schema;
+const   Schema = mongoose.Schema;
 
 
 const categorySchema = new Schema({
@@ -19,4 +19,4 @@ const categorySchema = new Schema({
     },
    
 });
-module.exports = moongoose.model("Category",categorySchema);
+module.exports = mongoose.model("Category",categorySchema);

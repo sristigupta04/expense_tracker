@@ -1,0 +1,24 @@
+
+const getmonth = (month,year)=>{
+    const start = new Date(year,month -1,1);
+    const end = new Date(year,month,0,23,59,59);
+    return {start,end};
+}
+
+
+const currentmonth = () =>{
+    const now = new Date();
+    return getmonth(now.getmonth() +1,now.getFullYear());
+}
+
+
+const format = (amount,currency = "INR")=>{
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(amount);
+}
+
+
+
+const saing = (income,expense)=>{
+    if(income === 0)return 0;
+    return Math.round(((income-expense)/income)*100);
+}

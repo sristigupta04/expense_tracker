@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 
-const transactionSchemaa = new moongose.Schema({
+const transactionSchema = new Schema({
     
     amount:{
         type:Number,
@@ -31,4 +31,5 @@ const transactionSchemaa = new moongose.Schema({
 })
 
 
-module.exports = mongose.model("transcation",transactionSchemaa);
+module.exports = mongoose.model("transcation",transactionSchema);
+

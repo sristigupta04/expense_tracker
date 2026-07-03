@@ -1,7 +1,5 @@
-const { model } = require("mongoose");
-const mongoose = require("moongoose");
-const Category = require("./Category");
-const Schema = moongoose.Schema;
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
 
 
 const BudgetSchema = new Schema({
@@ -13,8 +11,8 @@ const BudgetSchema = new Schema({
         ref:"User",
         required:true,
     },
-     Category:{
-        type:Number,
+     category:{
+        type:String,
         enum:['food','travel','shopping','rent'],
         required:true,
      },
@@ -23,12 +21,12 @@ const BudgetSchema = new Schema({
         required:true,
      },
      month:{
-          month:Number,
+         type:Number,
         required:true,
      },
      year:{
-        year:Number,
+      type:Number,
         required:true
      }
 });
-module.exports = moongoose.model("budget",BudgetSchema);
+module.exports = mongoose.model("Budget",BudgetSchema);
