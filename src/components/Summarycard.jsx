@@ -2,20 +2,18 @@
 
 
 export default function SummaryCard(){
+    
     return (
      <div>
-        <div className="">
-            <Card>
-                <income
-                title="expense"
-                amount ={3000}/>
-                <finance
-                title="expense"
-                amount ={3000}
-                />
-
-            </Card>
-</div>
+      <div>
+        <div className="summary">
+            <h2>Track Data:</h2>
+        <span > Total Balance:{}</span>
+         <span > Total Balance:{}</span>
+          <span > Total Balance:{}</span>
+           <span > Total Balance:{}</span>
+        </div>
+      </div>
         
      </div>   
     )
