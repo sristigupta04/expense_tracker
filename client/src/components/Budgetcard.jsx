@@ -28,11 +28,6 @@ function BudgetCard({ budget }) {
 
 
 
-
-
-
-
-
 function App(){
     const [budget] = useState([
  {category:"Food", limit:10000, spent:4000},

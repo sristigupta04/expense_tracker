@@ -1,4 +1,5 @@
 import { useState } from "react";
+import formatCurrency from "../utils/formatCurrency";
 
 export default function Dashboard() {
 
@@ -24,6 +25,7 @@ export default function Dashboard() {
   // Add Form
   function handleSubmit(e) {
     e.preventDefault();
+          <h2>{formatCurrency(balance)}</h2>
 
     const title = e.target.title.value;
     const amount = Number(e.target.amount.value);
