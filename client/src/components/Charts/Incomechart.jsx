@@ -8,13 +8,11 @@ import {
   Legend,
 } from "recharts";
 
-function IncomeChart({ transactions }) {
-  // Sirf income transactions
+export default function IncomeChart({ transactions }) {
   const income = transactions.filter(
     (item) => item.type === "income"
   );
 
-  // Same date ki income ko add karo
   const chartData = income.reduce((acc, item) => {
     const found = acc.find((i) => i.date === item.date);
 
@@ -31,24 +29,26 @@ function IncomeChart({ transactions }) {
   }, []);
 
   return (
-    <LineChart width={500} height={300} data={chartData}>
-      <CartesianGrid strokeDasharray="3 3" />
+    <div>
+      <h2>Income Chart</h2>
 
-      <XAxis dataKey="date" />
+      <LineChart width={500} height={300} data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" />
 
-      <YAxis />
+        <XAxis dataKey="date" />
 
-      <Tooltip />
+        <YAxis />
 
-      <Legend />
+        <Tooltip />
 
-      <Line
-        type="monotone"
-        dataKey="amount"
-        stroke="#8884d8"
-      />
-    </LineChart>
+        <Legend />
+
+        <Line
+          type="monotone"
+          dataKey="amount"
+          stroke="#8884d8"
+        />
+      </LineChart>
+    </div>
   );
 }
-
-export default IncomeChart;

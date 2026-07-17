@@ -1,84 +1,48 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
-export default function Register() {
-  const [username, setUser] = useState("");
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPass] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
+function handleSubmit(e) {
+  e.preventDefault();
 
-  function handleSubmit(e) {
-    e.preventDefault();
+  setError("");
+  setLoading(true);
 
-    setError("");
-    setLoading(true);
-
-    if (!username || !email || !password || !confirmPassword) {
-      setError("Please fill in all fields");
-      setLoading(false);
-      return;
-    }
-
-    if (!email.includes("@")) {
-      setError("Please enter a valid email");
-      setLoading(false);
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
-      setLoading(false);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      setLoading(false);
-      return;
-    }
-
-    const regex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
-
-    if (!regex.test(password)) {
-      setError(
-        "Password must contain uppercase, lowercase, number and special character"
-      );
-      setLoading(false);
-      return;
-    }
-
-    console.log({
-      username,
-      email,
-      password,
-    });
-
+  if (!email || !password) {
+    setError("Please fill all fields.");
     setLoading(false);
-
-    // Backend ke baad yahan API call hogi
-    navigate("/dashboard");
+    return;
   }
+
+  const user = JSON.parse(localStorage.getItem("currentUser"));
+
+  if (!user) {
+    setError("No registered user found.");
+    setLoading(false);
+    return;
+  }
+
+  if (user.email !== email || user.password !== password) {
+    setError("Invalid email or password.");
+    setLoading(false);
+    return;
+  }
+
+  setLoading(false);
+  navigate("/dashboard");
+}
 
   return (
     <form onSubmit={handleSubmit}>
-      <h2>Register</h2>
-
-      <input
-        type="text"
-        placeholder="Full Name"
-        value={username}
-        onChange={(e) => setUser(e.target.value)}
-      />
-
-      <br />
-      <br />
+      <h2>Login</h2>
 
       <input
         type="email"
@@ -100,16 +64,6 @@ export default function Register() {
       <br />
       <br />
 
-      <input
-        type={showPassword ? "text" : "password"}
-        placeholder="Confirm Password"
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-      />
-
-      <br />
-      <br />
-
       <button
         type="button"
         onClick={() => setShowPassword(!showPassword)}
@@ -123,15 +77,15 @@ export default function Register() {
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       <button type="submit" disabled={loading}>
-        {loading ? "Registering..." : "Register"}
-      </button>
-
+  {loading ? "Logging in..." : "Login"}
+</button>
       <br />
       <br />
 
-      <p>
-        Already have an account? <Link to="/login">Login</Link>
-      </p>
+    <p>
+  Don't have an account?{" "}
+  <Link to="/register">Register</Link>
+</p>
     </form>
   );
 }

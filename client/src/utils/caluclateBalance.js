@@ -5,7 +5,7 @@ export default function calculateBalance(transactions) {
   transactions.forEach((transaction) => {
     if (transaction.type === "income") {
       income += Number(transaction.amount);
-    } else {
+    } else if (transaction.type === "expense") {
       expense += Number(transaction.amount);
     }
   });

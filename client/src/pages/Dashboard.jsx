@@ -1,173 +1,62 @@
-import { useState } from "react";
-import formatCurrency from "../utils/formatCurrency";
+import Navbar from "../components/Navbar";
+import SummaryCard from "../components/SummaryCard";
+import TransactionForm from "../components/TransactionsForm";
+import TransactionTable from "../components/TransactionTable";
+import CategoryChart from "../components/charts/CategoryChart";
+import IncomeChart from "../components/charts/IncomeChart";
+import Loader from "../components/Loader";
+
+import calculateBalance from "../utils/calculateBalance";
+import { useExpense } from "../context/ExpenseContext";
 
 export default function Dashboard() {
+  const {
+    transactions,
+    addExpense,
+    removeExpense,
+  } = useExpense();
 
-  const [balance, setBalance] = useState(25000);
-  const [income, setIncome] = useState(40000);
-  const [expense, setExpense] = useState(15000);
+  const { income, expense, balance } =
+    calculateBalance(transactions);
 
-  const [transactions, setTransactions] = useState([
-    {
-      id: 1,
-      title: "Salary",
-      amount: 30000,
-      type: "income"
-    },
-    {
-      id: 2,
-      title: "Food",
-      amount: 500,
-      type: "expense"
-    }
-  ]);
-
-  // Add Form
-  function handleSubmit(e) {
-    e.preventDefault();
-          <h2>{formatCurrency(balance)}</h2>
-
-    const title = e.target.title.value;
-    const amount = Number(e.target.amount.value);
-    const type = e.target.type.value;
-
-    const transaction = {
-      id: transactions.length + 1,
-      title,
-      amount,
-      type
-    };
-
-    addTransaction(transaction);
-
-    e.target.reset();
-  }
-
-  // Add Transaction
-  function addTransaction(transaction) {
-
-    setTransactions([...transactions, transaction]);
-
-    if (transaction.type === "income") {
-      setIncome(income + transaction.amount);
-      setBalance(balance + transaction.amount);
-    }
-
-    if (transaction.type === "expense") {
-      setExpense(expense + transaction.amount);
-      setBalance(balance - transaction.amount);
-    }
-  }
-
-  // Delete Transaction
-  function deleteTransaction(id) {
-
-    const transaction = transactions.find(
-      (t) => t.id === id
-    );
-
-    setTransactions(
-      transactions.filter((t) => t.id !== id)
-    );
-
-    if (transaction.type === "income") {
-      setIncome(income - transaction.amount);
-      setBalance(balance - transaction.amount);
-    }
-
-    if (transaction.type === "expense") {
-      setExpense(expense - transaction.amount);
-      setBalance(balance + transaction.amount);
-    }
-  }
-
-  // Edit Transaction
-  function editTransaction(id) {
-
-    const newTitle = prompt("Enter new title");
-
-    const newAmount = Number(prompt("Enter new amount"));
-
-    setTransactions(
-      transactions.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              title: newTitle,
-              amount: newAmount
-            }
-          : t
-      )
-    );
-  }
+  const loading = false;
 
   return (
     <>
-      <h1>Dashboard</h1>
+      <Navbar />
 
-      <h2>Balance : ₹{balance}</h2>
-      <h2>Income : ₹{income}</h2>
-      <h2>Expense : ₹{expense}</h2>
+      {loading && <Loader />}
 
-      <form onSubmit={handleSubmit}>
+      <SummaryCard
+        balance={balance}
+        income={income}
+        expense={expense}
+      />
 
-        <input
-          type="text"
-          name="title"
-          placeholder="Title"
-        />
+      <TransactionForm
+        addExpense={addExpense}
+      />
 
-        <input
-          type="number"
-          name="amount"
-          placeholder="Amount"
-        />
+      <TransactionTable
+        transactions={transactions}
+        remove={removeExpense}
+      />
 
-        <select name="type">
-          <option value="income">Income</option>
-          <option value="expense">Expense</option>
-        </select>
+      <CategoryChart
+        transactions={transactions}
+      />
 
-        <button type="submit">
-          Add Transaction
-        </button>
+      <ExpenseChart
+        transactions={transactions}
+      />
 
-      </form>
+      <IncomeChart
+        transactions={transactions}
+      />
 
-      <hr />
-
-      {transactions.map((transaction) => (
-
-        <div key={transaction.id}>
-
-          <h3>{transaction.title}</h3>
-
-          <p>
-            ₹{transaction.amount} ({transaction.type})
-          </p>
-
-          <button
-            onClick={() =>
-              editTransaction(transaction.id)
-            }
-          >
-            Edit
-          </button>
-
-          <button
-            onClick={() =>
-              deleteTransaction(transaction.id)
-            }
-          >
-            Delete
-          </button>
-
-          <hr />
-
-        </div>
-
-      ))}
-
+      <MonthlyChart
+        transactions={transactions}
+      />
     </>
   );
 }

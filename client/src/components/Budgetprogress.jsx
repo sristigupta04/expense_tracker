@@ -1,6 +1,4 @@
-import React from "react";
-
-function ProgressBar({ limit, spent, percentage }) {
+export default function ProgressBar({ percentage }) {
   let color = "green";
 
   if (percentage >= 90) {
@@ -33,6 +31,3 @@ function ProgressBar({ limit, spent, percentage }) {
     </div>
   );
 }
-
-
-export default ProgressBar;

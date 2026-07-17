@@ -3,24 +3,14 @@ import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import Budget from "./pages/Budget";
+import Budgets from "./pages/Budgets";
 import Reports from "./pages/Reports";
+
 import ProtectedRoute from "./components/ProtectedRoute";
-import BudgetProgress from "./components/BudgetProgress";
-import BudgetCard from "./components/BudgetCard";
-import Loader from "./components/Loader";
-import Navbar from "./components/Navbar";
-import TransactionForm from "./components/TransactionForm";
-import Transactiontable from "./components/TransactionList";
-import IncomeCHart
+
 function App() {
-
-  const isLoggedIn = true;
-
   return (
-
     <Routes>
-
       <Route path="/" element={<Login />} />
 
       <Route path="/register" element={<Register />} />
@@ -28,7 +18,7 @@ function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}>
+          <ProtectedRoute>
             <Dashboard />
           </ProtectedRoute>
         }
@@ -37,8 +27,8 @@ function App() {
       <Route
         path="/budget"
         element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}>
-            <Budget />
+          <ProtectedRoute>
+            <Budgets />
           </ProtectedRoute>
         }
       />
@@ -46,14 +36,12 @@ function App() {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}>
+          <ProtectedRoute>
             <Reports />
           </ProtectedRoute>
         }
       />
-
     </Routes>
-
   );
 }
 
