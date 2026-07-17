@@ -1,53 +1,47 @@
-const { useState } = require("react");
+import React, { useState } from "react";
+import { PieChart, Pie } from "recharts";
 
+function CategoryChart({ transactions }) {
+  const chartData = transactions.reduce((acc, item) => {
+    const found = acc.find((i) => i.category === item.category);
 
+    if (found) {
+      found.amount += Number(item.amount);
+    } else {
+      acc.push({
+        category: item.category,
+        amount: Number(item.amount),
+      });
+    }
 
-function App(){
-  const [transaction ,setTransactions] = useState([ ]);
- <category />
-        
+    return acc;
+  }, []);
+
+  return (
+    <PieChart width={300} height={300}>
+      <Pie
+        data={chartData}
+        dataKey="amount"
+        nameKey="category"
+        outerRadius={100}
+      />
+    </PieChart>
+  );
 }
- function  ChartData({transaction}){
-         const [form, setform] = useState([
-        
-  {
-   title: "",
-    amount: "",
-    category: "",
-    type: "",
-    date: "",
-  },
-         ]);
 
+function App() {
+  const [transactions] = useState([
+    { title: "Pizza", amount: 500, category: "Food" },
+    { title: "Burger", amount: 300, category: "Food" },
+    { title: "Bus", amount: 200, category: "Travel" },
+    { title: "Shirt", amount: 1000, category: "Shopping" },
+  ]);
 
-
-         //handlesubmit
-
-const handle =((e)=>{
-e.preventDefault();
-
-})
-         //handle krna add new area
-
-
-const addNew = transaction.filter((prev)=>{[
-    ...prev,{
-        id:Date.now(),
-        ...form
-    },
-    ]});
-
-
-
-    return(
-        <>
-        <div className="form" >
-
-        </div>
-        </>
-    )
-
-
-
-
+  return (
+    <>
+      <CategoryChart transactions={transactions} />
+    </>
+  );
 }
+
+export default App;
