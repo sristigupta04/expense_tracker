@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useExpense } from "../context/ExpenseContext";
 
-export default function App() {
-  // Form Data
+export default function TransactionForm() {
+  const { addExpense } = useExpense();
+
   const [formData, setFormData] = useState({
     title: "",
     amount: "",
@@ -10,13 +12,8 @@ export default function App() {
     date: "",
   });
 
-  // All Transactions
-  const [transactions, setTransactions] = useState([]);
-
-  // Error
   const [error, setError] = useState("");
 
-  // Handle Input
   const handle = (e) => {
     const { name, value } = e.target;
 
@@ -26,7 +23,6 @@ export default function App() {
     }));
   };
 
-  // Auto remove error after 3 sec
   useEffect(() => {
     if (!error) return;
 
@@ -37,7 +33,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [error]);
 
-  // Submit Form
   const submit = (e) => {
     e.preventDefault();
 
@@ -48,7 +43,7 @@ export default function App() {
       !formData.type ||
       !formData.date
     ) {
-      setError("Please fill in all fields");
+      setError("Please fill all fields");
       return;
     }
 
@@ -57,18 +52,11 @@ export default function App() {
       return;
     }
 
-    // Add new transaction
-    setTransactions((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        ...formData,
-      },
-    ]);
+    addExpense({
+      ...formData,
+      amount: Number(formData.amount),
+    });
 
-    console.log("Transactions:", transactions);
-
-    // Clear Form
     setFormData({
       title: "",
       amount: "",
@@ -79,68 +67,53 @@ export default function App() {
   };
 
   return (
-    <>
-      <form onSubmit={submit}>
-        <div>
-          <label>Title</label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handle}
-          />
+    <form onSubmit={submit}>
+      <input
+        type="text"
+        name="title"
+        placeholder="Title"
+        value={formData.title}
+        onChange={handle}
+      />
 
-          <label>Amount</label>
-          <input
-            type="number"
-            name="amount"
-            value={formData.amount}
-            onChange={handle}
-          />
+      <input
+        type="number"
+        name="amount"
+        placeholder="Amount"
+        value={formData.amount}
+        onChange={handle}
+      />
 
-          <label>Category</label>
-          <input
-            type="text"
-            name="category"
-            value={formData.category}
-            onChange={handle}
-          />
+      <input
+        type="text"
+        name="category"
+        placeholder="Category"
+        value={formData.category}
+        onChange={handle}
+      />
 
-          <label>Type</label>
-          <input
-            type="text"
-            name="type"
-            value={formData.type}
-            onChange={handle}
-          />
+      <select
+        name="type"
+        value={formData.type}
+        onChange={handle}
+      >
+        <option value="">Select Type</option>
+        <option value="income">Income</option>
+        <option value="expense">Expense</option>
+      </select>
 
-          <label>Date</label>
-          <input
-            type="date"
-            name="date"
-            value={formData.date}
-            onChange={handle}
-          />
-        </div>
+      <input
+        type="date"
+        name="date"
+        value={formData.date}
+        onChange={handle}
+      />
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
+      {error && <p>{error}</p>}
 
-        <button type="submit">Add Transaction</button>
-      </form>
-
-      <hr />
-
-      <h2>Transactions</h2>
-
-      {transactions.map((item) => (
-        <div key={item.id}>
-          <h3>{item.title}</h3>
-          <p>₹ {item.amount}</p>
-          <p>{item.category}</p>
-          <p>{item.type}</p>
-          <p>{item.date}</p>
-        </div>
-      ))}
-    </>
+      <button type="submit">
+        Add Transaction
+      </button>
+    </form>
   );
 }

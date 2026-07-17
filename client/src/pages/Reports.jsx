@@ -1,89 +1,66 @@
-import { useState } from "react";
+import { useExpense } from "../context/ExpenseContext";
+
+import {
+  getTotalIncome,
+  getTotalExpense,
+  getBalance,
+  getCategoryReport,
+  getMonthlyReport,
+} from "../services/report";
+
+import formatDate from "../utils/formatDate";
+import formatCurrency from "../utils/formatCurrency";
 
 export default function Reports() {
+  const { transactions } = useExpense();
 
-  const [transactions, setTransactions] = useState([
-    {
-      id: 1,
-      title: "Salary",
-      category: "Salary",
-      amount: 30000,
-      type: "income",
-      date: "2026-07-01"
-    },
-    {
-      id: 2,
-      title: "Food",
-      category: "Food",
-      amount: 500,
-      type: "expense",
-      date: "2026-07-03"
-    },
-    {
-      id: 3,
-      title: "Shopping",
-      category: "Shopping",
-      amount: 1000,
-      type: "expense",
-      date: "2026-07-04"
-    }
-  ]);
+  const income = getTotalIncome(transactions);
+  const expense = getTotalExpense(transactions);
+  const balance = getBalance(transactions);
 
-  function calculateIncome() {
-    return transactions
-      .filter((t) => t.type === "income")
-      .reduce((acc, t) => acc + t.amount, 0);
-  }
-
-  function calculateExpense() {
-    return transactions
-      .filter((t) => t.type === "expense")
-      .reduce((acc, t) => acc + t.amount, 0);
-  }
-
-  function calculateBalance() {
-    return calculateIncome() - calculateExpense();
-  }
-
-  function categoryWiseReport(category) {
-    return transactions
-      .filter((t) => t.category === category)
-      .reduce((acc, t) => acc + t.amount, 0);
-  }
-
-  function monthlyReport(month) {
-    return transactions
-      .filter((t) => t.date.slice(5, 7) === month)
-      .reduce((acc, t) => acc + t.amount, 0);
-  }
+  const categoryReport = getCategoryReport(transactions);
+  const monthlyReport = getMonthlyReport(transactions);
 
   return (
     <div>
-
       <h1>Reports</h1>
 
-      <h2>Income : ₹{calculateIncome()}</h2>
-
-      <h2>Expense : ₹{calculateExpense()}</h2>
-
-      <h2>Balance : ₹{calculateBalance()}</h2>
+      <h2>Income : {formatCurrency(income)}</h2>
+      <h2>Expense : {formatCurrency(expense)}</h2>
+      <h2>Balance : {formatCurrency(balance)}</h2>
 
       <hr />
 
       <h3>Category Report</h3>
 
-      <p>Food : ₹{categoryWiseReport("Food")}</p>
-
-      <p>Shopping : ₹{categoryWiseReport("Shopping")}</p>
-
-      <p>Salary : ₹{categoryWiseReport("Salary")}</p>
+      {Object.entries(categoryReport).map(([category, amount]) => (
+        <p key={category}>
+          {category} : {formatCurrency(amount)}
+        </p>
+      ))}
 
       <hr />
 
       <h3>Monthly Report</h3>
 
-      <p>July : ₹{monthlyReport("07")}</p>
+      {Object.entries(monthlyReport).map(([month, amount]) => (
+        <p key={month}>
+          {month} : {formatCurrency(amount)}
+        </p>
+      ))}
 
+      <hr />
+
+      <h3>All Transactions</h3>
+
+      {transactions.map((item) => (
+        <div key={item.id}>
+          <p>Title : {item.title}</p>
+          <p>Date : {formatDate(item.date)}</p>
+          <p>Amount : {formatCurrency(item.amount)}</p>
+          <hr />
+        </div>
+      ))}
     </div>
   );
 }

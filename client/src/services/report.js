@@ -1,5 +1,3 @@
-// services/report.js
-
 export function getTotalIncome(transactions) {
   return transactions
     .filter((item) => item.type === "income")
@@ -13,10 +11,10 @@ export function getTotalExpense(transactions) {
 }
 
 export function getBalance(transactions) {
-  const income = getTotalIncome(transactions);
-  const expense = getTotalExpense(transactions);
-
-  return income - expense;
+  return (
+    getTotalIncome(transactions) -
+    getTotalExpense(transactions)
+  );
 }
 
 export function getCategoryReport(transactions) {
@@ -25,7 +23,8 @@ export function getCategoryReport(transactions) {
   transactions.forEach((item) => {
     if (item.type === "expense") {
       report[item.category] =
-        (report[item.category] || 0) + Number(item.amount);
+        (report[item.category] || 0) +
+        Number(item.amount);
     }
   });
 
@@ -38,7 +37,9 @@ export function getMonthlyReport(transactions) {
   transactions.forEach((item) => {
     const month = item.date.slice(0, 7);
 
-    report[month] = (report[month] || 0) + Number(item.amount);
+    report[month] =
+      (report[month] || 0) +
+      Number(item.amount);
   });
 
   return report;

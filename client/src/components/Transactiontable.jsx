@@ -1,120 +1,33 @@
-import React, { useState } from "react";
-import TransactionTable from "./TransactionTable";
-
-function App() {
-  const initials = [
-    {
-      id: 1,
-      title: "Salary",
-      amount: 5000,
-      category: "Income",
-      type: "Credit",
-      date: "2023-01-01",
-    },
-  ];
-
-  const [transactions, setTransactions] = useState(initials);
-
-  const [form, setForm] = useState({
-    title: "",
-    amount: "",
-    category: "",
-    type: "",
-    date: "",
-  });
-
-  // Input Change
-  const handle = (e) => {
-    const { name, value } = e.target;
-
-    setForm({
-      ...form,
-      [name]: value,
-    });
-  };
-
-  // Submit
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const newTransaction = {
-      id: Date.now(),
-      title: form.title,
-      amount: form.amount,
-      category: form.category,
-      type: form.type,
-      date: form.date,
-    };
-
-    setTransactions([...transactions, newTransaction]);
-
-    // Clear Form
-    setForm({
-      title: "",
-      amount: "",
-      category: "",
-      type: "",
-      date: "",
-    });
-  };
-
-  // Delete
-  const remove = (id) => {
-    const removeItem = transactions.filter((item) => item.id !== id);
-    setTransactions(removeItem);
-  };
-
+import formatDate from "../utils/formatDate";
+import formatCurrency from "../utils/formatCurrency";
+export default function TransactionTable({
+  transactions,
+  remove,
+}) {
   return (
-    <>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="title"
-          placeholder="Enter Title"
-          value={form.title}
-          onChange={handle}
-        />
+    <div>
+      <h2>Transactions</h2>
 
-        <input
-          type="number"
-          name="amount"
-          placeholder="Enter Amount"
-          value={form.amount}
-          onChange={handle}
-        />
+      {transactions.map((item) => (
+        <div key={item.id}>
+          <h3>{item.title}</h3>
 
-        <input
-          type="text"
-          name="category"
-          placeholder="Enter Category"
-          value={form.category}
-          onChange={handle}
-        />
+<p>Amount : {formatCurrency(item.amount)}</p>
+          <p>Category : {item.category}</p>
 
-        <input
-          type="text"
-          name="type"
-          placeholder="Enter Type"
-          value={form.type}
-          onChange={handle}
-        />
+          <p>Type : {item.type}</p>
 
-        <input
-          type="date"
-          name="date"
-          value={form.date}
-          onChange={handle}
-        />
+          <p>Date : {formatDate(item.date)}</p>
 
-        <button type="submit">Add Transaction</button>
-      </form>
+          <button
+            onClick={() => remove(item.id)}
+          >
+            Delete
+          </button>
 
-      <TransactionTable
-        transactions={transactions}
-        remove={remove}
-      />
-    </>
+          <hr />
+        </div>
+      ))}
+    </div>
   );
 }
-
-export default App;

@@ -1,23 +1,41 @@
+export default function SummaryCard({
+  income,
+  expense,
+  balance,
+}) {
+  return (
+    <div className="summary">
 
-import income from "./income";
-import expense from "./expense";
-import balance from "./balance";
+      <Card
+        title="Income"
+        amount={income}
+        type="income"
+      />
 
-function App(){
-    return(
-        <>
-    <Card title="Income" amount={income} type="income" />
-    <Card title="expense" amount={expense} type="expense" />
-    <Card title="balance" amount={balance} type="balance" />
-</>
-    )  
+      <Card
+        title="Expense"
+        amount={expense}
+        type="expense"
+      />
+
+      <Card
+        title="Balance"
+        amount={balance}
+        type="balance"
+      />
+
+    </div>
+  );
 }
-function Card({title,amount,type}){
-    return(
-        <div className="card">
-            <h2>{title}</h2>
-            <p>{amount}</p>
-            <p>{type}</p> 
-        </div>
-    )
+
+function Card({ title, amount, type }) {
+  return (
+    <div className="card">
+      <h2>{title}</h2>
+
+      <p>₹{amount}</p>
+
+      <p>{type}</p>
+    </div>
+  );
 }

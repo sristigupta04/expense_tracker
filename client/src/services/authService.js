@@ -1,5 +1,3 @@
-// services/authService.js
-
 export function register(userData) {
   if (!userData.name || !userData.email || !userData.password) {
     throw new Error("All fields are required.");
@@ -35,7 +33,10 @@ export function login(email, password) {
     throw new Error("Invalid email or password.");
   }
 
-  localStorage.setItem("currentUser", JSON.stringify(user));
+  localStorage.setItem(
+    "currentUser",
+    JSON.stringify(user)
+  );
 
   return user;
 }
@@ -45,9 +46,11 @@ export function logout() {
 }
 
 export function getCurrentUser() {
-  return JSON.parse(localStorage.getItem("currentUser"));
+  return JSON.parse(
+    localStorage.getItem("currentUser")
+  );
 }
 
 export function isAuthenticated() {
-  return !!localStorage.getItem("currentUser");
+  return getCurrentUser() !== null;
 }
