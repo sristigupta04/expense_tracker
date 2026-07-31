@@ -1,77 +1,138 @@
-import { useState } from "react";
-import BudgetProgress from "../components/BudgetProgress";
+import { useEffect, useState } from "react";
 import BudgetCard from "../components/BudgetCard";
+import {
+  getBudgets,
+  createBudget,
+  updateBudget,
+  deleteBudget,
+} from "../services/budget";
 
 export default function Budgets() {
-  const [budgets, setBudgets] = useState([
-    {
-      id: 1,
-      title: "Food",
-      limit: 10000,
-      spent: 4000,
-    },
-  ]);
+  const [budgets, setBudgets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  function addBudget() {
-    const newTitle = prompt("Enter Budget Title");
-    const newLimit = Number(prompt("Enter Budget Limit"));
+  useEffect(() => {
+    fetchBudgets();
+  }, []);
 
-    if (!newTitle || !newLimit) return;
-
-    setBudgets([
-      ...budgets,
-      {
-        id: Date.now(),
-        title: newTitle,
-        limit: newLimit,
-        spent: 0,
-      },
-    ]);
+  async function fetchBudgets() {
+    try {
+      const data = await getBudgets();
+      setBudgets(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function deleteBudget(id) {
-    setBudgets(
-      budgets.filter((budget) => budget.id !== id)
+  async function addBudget() {
+    const title = prompt("Enter Budget Title");
+    const limit = Number(prompt("Enter Budget Limit"));
+
+    if (!title || !limit || limit <= 0) return;
+
+    try {
+      const budget = await createBudget({
+        category: title,
+        budgetlimit: limit,
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+      });
+
+      setBudgets((prev) => [budget, ...prev]);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleDelete(id) {
+    try {
+      await deleteBudget(id);
+
+      setBudgets((prev) =>
+        prev.filter((budget) => budget._id !== id)
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleEdit(id) {
+    const budget = budgets.find((b) => b._id === id);
+
+    if (!budget) return;
+
+    const title = prompt(
+      "Enter New Title",
+      budget.category
     );
+
+    const limit = Number(
+      prompt("Enter New Limit", budget.budgetlimit)
+    );
+
+    if (!title || !limit || limit <= 0) return;
+
+    try {
+      const updated = await updateBudget(id, {
+        category: title,
+        budgetlimit: limit,
+        month: budget.month,
+        year: budget.year,
+      });
+
+      setBudgets((prev) =>
+        prev.map((b) =>
+          b._id === id ? updated : b
+        )
+      );
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  function editBudget(id) {
-    setBudgets(
-      budgets.map((budget) => {
-        if (budget.id === id) {
-          const newTitle = prompt("Enter New Title", budget.title);
-          const newLimit = Number(
-            prompt("Enter New Limit", budget.limit)
-          );
-
-          return {
-            ...budget,
-            title: newTitle,
-            limit: newLimit,
-          };
-        }
-
-        return budget;
-      })
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        Loading...
+      </div>
     );
   }
 
   return (
-    <div>
-      <h1>Budgets</h1>
+    <div className="min-h-screen bg-slate-100 p-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-800">
+              Budgets
+            </h1>
 
-      <button onClick={addBudget}>
-        Add Budget
-      </button>
+            <p className="mt-2 text-slate-500">
+              Manage your monthly budgets.
+            </p>
+          </div>
 
-      {budgets.map((budget) => (
-        <BudgetCard
-          key={budget.id}
-          budget={budget}
-          onDelete={deleteBudget}
-          onEdit={editBudget}
-        />
-      ))}
+          <button
+            onClick={addBudget}
+            className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+          >
+            + Add Budget
+          </button>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {budgets.map((budget) => (
+            <BudgetCard
+              key={budget._id}
+              budget={budget}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

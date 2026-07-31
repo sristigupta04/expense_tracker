@@ -1,0 +1,19 @@
+
+
+function App(){
+const [transactions, setTransactions] = React.useState([
+    {
+        title: "Salary",
+        amount: 100,
+        category: "Income",
+        type: "Credit",
+        Date: "2023-01-01"
+    }
+]);
+    return(
+        <>
+        <Card title="Add Transaction" amount="" category="" type="" Date="" />
+
+        </>
+    )
+}

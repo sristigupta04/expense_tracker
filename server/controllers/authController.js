@@ -1,47 +1,51 @@
-
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
+
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: "30d",
+  });
 };
-const perfectPasswordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/;
 
-module.exports.registerUser= async(req,res,next) =>{
-    try{
-         const name = req.body.name;
-         const email = req.body.email;
-         const password = req.body.password;
-if(!name || !email || !password){
-    
-     res.status(400).json({
-        message:"all field are required",
-     });
-}
+const perfectPasswordRegex =
+  /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/;
 
- const existinguser = await User.findOne({ email });
-  if(existinguser){
-  res.status(201).json({
-    message:"user exist  successfull"
-  });
-}
-const perfectPasswordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/;
-if(!perfectPasswordRegex.test(password)){
-              return res.status(400).json({
-                message:" weak  password"
-              }); 
-          }
-    const hashedpassowrd = await bcrypt.hash(password,12);
-   const user =  new User({
-    name,
-    email,
-password: hashedPassword
-  });
-    await user.save();
+// Register
+module.exports.registerUser = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
 
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "All fields are required",
+      });
+    }
 
+    const existingUser = await User.findOne({ email });
 
- res.status(201).json({
+    if (existingUser) {
+      return res.status(409).json({
+        message: "User already exists",
+      });
+    }
+
+    if (!perfectPasswordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          "Password must contain uppercase, lowercase, number, special character and be at least 12 characters long.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    res.status(201).json({
       message: "User Registered Successfully",
       token: generateToken(user._id),
       user: {
@@ -50,73 +54,77 @@ password: hashedPassword
         email: user.email,
       },
     });
+
   } catch (err) {
     res.status(500).json({
       message: err.message,
     });
   }
 };
- module.exports.loginUser= async (req,res,next)=>{
 
-    try{
+// Login
+module.exports.loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-const {email,password} = req.body;
-        if(!email  || ! password){
-           return res.status(400).json({
-            message:"all the fields are required"
-           })
-        }
-        
-          const user = await User.findOne({ email });
-          if (!user) {
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "All fields are required",
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
       return res.status(400).json({
         message: "Invalid Email or Password",
       });
     }
-      const match =await  bcrypt.compare(password,user.password);
-          if(!match){
-          return  res.status(400).json({
-                message:"invaild"
-            });
-          }
-          
-        
-  res.status(200).json({
-    message: "Login Successful",
-      token: generateToken(user._id),
-    user:{
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      token: generateToken(user._id),
-    },
-    });        
-        
-        }catch(err){
-        res.status(500).json({message:err.message});
-        }
+
+    const match = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    if (!match) {
+      return res.status(400).json({
+        message: "Invalid Email or Password",
+      });
     }
-    
 
-module.exports.getProfile = async (req, res, next) => {
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      message: "Login Successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+// Profile
+module.exports.getProfile = async (req, res) => {
   try {
+    const user = await User.findById(req.user.id).select(
+      "-password"
+    );
 
-    // Find current logged in user
-    const user = await User.findById(req.user.id).select("-password");
-
-    // Check user
     if (!user) {
       return res.status(404).json({
         message: "User not found",
       });
     }
 
-    // Send user details
-    res.status(200).json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-    });
+    res.status(200).json(user);
 
   } catch (err) {
     res.status(500).json({
@@ -124,19 +132,11 @@ module.exports.getProfile = async (req, res, next) => {
     });
   }
 };
-module.exports.logoutUser = async (req, res, next) => {
-  try {
 
-    res.status(200).json({
-      success: true,
-      message: "Logout Successful",
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      message: err.message,
-    });
-
-  }
+// Logout
+module.exports.logoutUser = async (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Logout Successful",
+  });
 };

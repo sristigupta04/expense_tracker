@@ -1,4 +1,5 @@
 import {
+  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
@@ -25,22 +26,40 @@ export default function DailyChart({ transactions }) {
   }, []);
 
   return (
-    <div>
-      <h2>Daily Chart</h2>
+    <div className="rounded-2xl bg-white p-6 shadow-lg">
 
-      <BarChart width={500} height={300} data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
+      <h2 className="mb-6 text-xl font-bold text-slate-800">
+        Daily Expense
+      </h2>
 
-        <XAxis dataKey="date" />
+      <div className="h-80">
 
-        <YAxis />
+        <ResponsiveContainer width="100%" height="100%">
 
-        <Tooltip />
+          <BarChart data={data}>
 
-        <Legend />
+            <CartesianGrid strokeDasharray="3 3" />
 
-        <Bar dataKey="amount" fill="#8884d8" />
-      </BarChart>
+            <XAxis dataKey="date" />
+
+            <YAxis />
+
+            <Tooltip />
+
+            <Legend />
+
+            <Bar
+              dataKey="amount"
+              fill="#3B82F6"
+              radius={[8, 8, 0, 0]}
+            />
+
+          </BarChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
     </div>
   );
 }

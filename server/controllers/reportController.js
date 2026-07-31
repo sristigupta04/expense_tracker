@@ -1,102 +1,119 @@
 const Transaction = require("../models/Transaction");
 const Budget = require("../models/Budget");
 
+// Dashboard Report
+module.exports.getDashboardStats = async (req, res) => {
+  try {
+    const transactions = await Transaction.find();
 
+    let income = 0;
+    let expense = 0;
 
-module.exports.getDashboardStats = async( req,res)=>{
-     try{
-        const incomes = await Transaction.find({type:"income"});
-        const expenses = await Transaction.find({type:"expense"});
-        if(!expenses){
-            res.status(401).json({message:"error found"});
-        }
-        let totalincome= 0;
-         incomes.forEach((transaction) => {
-             totalincome +=transaction.amount;
-         });
-         let totalexpense= 0;
-         expenses.forEach((transaction)=>{
-            totalexpense += transaction.amount;
-         })
-         let balance = totalincome- totalexpense;
-         const saving = totalincome>0?((balance/totalincome)*100).toFixed(2):0;
+    transactions.forEach((item) => {
+      if (item.type === "income") {
+        income += Number(item.amount);
+      } else if (item.type === "expense") {
+        expense += Number(item.amount);
+      }
+    });
 
-         res.status(200).json({totalincome,totalexpense,balance,saving});
-     }catch(err){
-        res.status(500).json({message:err.message});
-     }
-}
+    const balance = income - expense;
 
-module.exports.getMonthlyReport = async( req,res)=>{
-         const transactions =await Transaction.find();
-     try{
-     
-     let sum =0;
-     transactions.forEach((transactions)=>{
-        sum += transactions.amount;
-     })
-     
-    res.status(200).json({total:sum});
-     }catch(err){
-        res.status(500).json({message:err.message});
-     }
-}
+    res.status(200).json({
+      income,
+      expense,
+      balance,
+    });
 
-module.exports.getCategoryReport= async( req,res)=>{
-     const transaction =await Transaction.find();
-     try{
-     
-     let sum =0;
-     transaction.forEach((transaction)=>{
-        sum += transaction.amount;
-     })
-     
-    res.status(200).json({category,
-        total: sum});
-     }catch(err){
-        res.status(500).json({message:err.message});
-     }
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
 
-}
+// Category Report
+module.exports.getCategoryReport = async (req, res) => {
+  try {
+    const transactions = await Transaction.find();
 
-module.exports.getBudgetReport= async( req,res)=>{
-     const budget = await Budget.find();
-     const transactions = await Transaction.find();
-     try{
-     if(!transactions){
-          res.status(401).json({message:err.message});
-     }
-     let totalbudget= 0;
-         budget.forEach((budget) => {
-             totalbudget +=budget.budgetlimit;
-         });
-         let totaltransaction= 0;
-         transactions.forEach((transactions)=>{
-            totaltransaction += transactions.amount;
-         })
-         let balance = totalbudget- totaltransaction;
-         const saving = totaltransaction>0?((balance/totaltransaction)*100).toFixed(2):0;
-  res.status(200).json({totalbudget,totaltransaction,balance});
-     }catch(err){
-        res.json(500).json({message:err.message});
-     }
-}
+    const report = {};
 
-module.exports.getTrendAnalysis = async( req,res)=>{
-    
- try{
-    
+    transactions.forEach((item) => {
+      if (item.type === "expense") {
+        report[item.category] =
+          (report[item.category] || 0) +
+          Number(item.amount);
+      }
+    });
 
-      res.status(200).json({
-         message:
-         "Trend Analysis"
-      });
+    res.status(200).json(report);
 
-   }catch(err){
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
 
-      res.status(500).json({
-         message:err.message
-      });
+// Monthly Report
+module.exports.getMonthlyReport = async (req, res) => {
+  try {
+    const transactions = await Transaction.find();
 
-   }
-}
+    const report = {};
+
+    transactions.forEach((item) => {
+      const month = item.date.toISOString().slice(0, 7);
+
+      report[month] =
+        (report[month] || 0) +
+        Number(item.amount);
+    });
+
+    res.status(200).json(report);
+
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+// Budget Report
+module.exports.getBudgetReport = async (req, res) => {
+  try {
+    const budgets = await Budget.find();
+    const transactions = await Transaction.find();
+
+    let totalBudget = 0;
+    let totalExpense = 0;
+
+    budgets.forEach((budget) => {
+      totalBudget += Number(budget.budgetlimit);
+    });
+
+    transactions.forEach((transaction) => {
+      if (transaction.type === "expense") {
+        totalExpense += Number(transaction.amount);
+      }
+    });
+
+    res.status(200).json({
+      totalBudget,
+      totalExpense,
+      remaining: totalBudget - totalExpense,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+module.exports.getTrendAnalysis = async (req, res) => {
+  res.status(200).json({
+    message: "Trend Analysis",
+  });
+};

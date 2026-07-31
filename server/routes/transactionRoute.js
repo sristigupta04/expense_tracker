@@ -2,24 +2,30 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    addTransaction,
-    getTransactions,
-    getTransactionsById,
-    updateTransaction,
-    deleteTransaction,
-    deleteTransactionById
-}= require("../controllers/transactionController");
-const { route } = require("./authRoute");
+  addTransaction,
+  getTransactions,
+  getTransactionsById,
+  updateTransaction,
+  deleteTransactionById,
+  deleteTransaction,
+} = require("../controllers/transactionController");
 
+// Create Transaction
+router.post("/", addTransaction);
 
+// Get All Transactions
+router.get("/", getTransactions);
 
+// Get Transaction By Id
+router.get("/:id", getTransactionsById);
 
-router.post("/",addTransaction);
-router.get("/",getTransactions);
-router.get("/:id",getTransactionsById);
-router.put("/:id",updateTransaction);
-router.delete("/",deleteTransaction);
-router.delete("/:id",deleteTransactionById);
+// Update Transaction
+router.put("/:id", updateTransaction);
 
+// Delete Transaction By Id
+router.delete("/:id", deleteTransactionById);
+
+// Delete All Transactions
+router.delete("/", deleteTransaction);
 
 module.exports = router;

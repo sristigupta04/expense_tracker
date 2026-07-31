@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   login,
   logout,
@@ -15,15 +15,15 @@ export function AuthProvider({ children }) {
     setUser(getCurrentUser());
   }, []);
 
-  const handleLogin = (email, password) => {
-    const loggedInUser = login(email, password);
-
-    if (loggedInUser) {
+  const handleLogin = async (email, password) => {
+    try {
+      const loggedInUser = await login(email, password);
       setUser(loggedInUser);
       return true;
+    } catch (err) {
+      console.error(err);
+      return false;
     }
-
-    return false;
   };
 
   const handleLogout = () => {
