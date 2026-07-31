@@ -1,35 +1,49 @@
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
 
-
-const transactionSchema = new Schema({
-    
-    amount:{
-        type:Number,
-        required:[true, "amount to add"],
-        
+const transactionSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: true,
+      trim: true,
     },
-     type:{
-        type:String,
-        enum:["income",'expense'],
-        required:true,
-     },
-     category:{
-         type:String,
-         enum:['food','travel','shopping','rent','bills','health','entertainment'],
-         required:true,
-     },
-     date:{
-        required:true,
-        type:Date,
-     },
-     note:{
-        type:String,
-        required:true,
-     }
- 
-})
 
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
 
-module.exports = mongoose.model("transcation",transactionSchema);
+    type: {
+      type: String,
+      enum: ["income", "expense"],
+      required: true,
+    },
 
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    date: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+module.exports = mongoose.model(
+  "Transaction",
+  transactionSchema
+);

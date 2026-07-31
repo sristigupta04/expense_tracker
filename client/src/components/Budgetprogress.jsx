@@ -1,33 +1,38 @@
 export default function ProgressBar({ percentage }) {
-  let color = "green";
+  let color = "bg-green-500";
 
   if (percentage >= 90) {
-    color = "red";
+    color = "bg-red-500";
   } else if (percentage >= 60) {
-    color = "orange";
+    color = "bg-yellow-500";
   }
 
   return (
-    <div>
-      <div
-        style={{
-          width: "100%",
-          height: "20px",
-          background: "#ddd",
-          borderRadius: "10px",
-        }}
-      >
-        <div
-          style={{
-            width: `${percentage}%`,
-            height: "100%",
-            background: color,
-            borderRadius: "10px",
-          }}
-        ></div>
+    <div className="mt-4">
+
+      <div className="mb-2 flex items-center justify-between">
+
+        <span className="text-sm font-medium text-slate-600">
+          Progress
+        </span>
+
+        <span className="text-sm font-semibold text-slate-700">
+          {percentage.toFixed(0)}%
+        </span>
+
       </div>
 
-      <p>{percentage.toFixed(0)}%</p>
+      <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+
+        <div
+          className={`${color} h-full rounded-full transition-all duration-500 ease-in-out`}
+          style={{
+            width: `${Math.min(percentage, 100)}%`,
+          }}
+        />
+
+      </div>
+
     </div>
   );
 }

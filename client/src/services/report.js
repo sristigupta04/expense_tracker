@@ -1,46 +1,19 @@
-export function getTotalIncome(transactions) {
-  return transactions
-    .filter((item) => item.type === "income")
-    .reduce((total, item) => total + Number(item.amount), 0);
-}
+import api from "./api";
 
-export function getTotalExpense(transactions) {
-  return transactions
-    .filter((item) => item.type === "expense")
-    .reduce((total, item) => total + Number(item.amount), 0);
-}
+// Dashboard Summary
+export const getDashboardReport = async () => {
+  const { data } = await api.get("/report");
+  return data;
+};
 
-export function getBalance(transactions) {
-  return (
-    getTotalIncome(transactions) -
-    getTotalExpense(transactions)
-  );
-}
+// Category Report
+export const getCategoryReport = async () => {
+  const { data } = await api.get("/report/category");
+  return data;
+};
 
-export function getCategoryReport(transactions) {
-  const report = {};
-
-  transactions.forEach((item) => {
-    if (item.type === "expense") {
-      report[item.category] =
-        (report[item.category] || 0) +
-        Number(item.amount);
-    }
-  });
-
-  return report;
-}
-
-export function getMonthlyReport(transactions) {
-  const report = {};
-
-  transactions.forEach((item) => {
-    const month = item.date.slice(0, 7);
-
-    report[month] =
-      (report[month] || 0) +
-      Number(item.amount);
-  });
-
-  return report;
-}
+// Monthly Report
+export const getMonthlyReport = async () => {
+  const { data } = await api.get("/report/monthly");
+  return data;
+};

@@ -1,43 +1,25 @@
-// services/budget.js
+import api from "./api";
 
-export function setBudget(amount) {
-  if (!amount || amount <= 0) {
-    throw new Error("Please enter a valid budget.");
-  }
+// Get all budgets
+export const getBudgets = async () => {
+  const { data } = await api.get("/budget");
+  return data;
+};
 
-  localStorage.setItem("budget", JSON.stringify(amount));
+// Create budget
+export const createBudget = async (budget) => {
+  const { data } = await api.post("/budget", budget);
+  return data;
+};
 
-  return amount;
-}
+// Update budget
+export const updateBudget = async (id, budget) => {
+  const { data } = await api.put(`/budget/${id}`, budget);
+  return data;
+};
 
-export function getBudget() {
-  const budget = JSON.parse(localStorage.getItem("budget"));
-
-  return budget || 0;
-}
-
-export function updateBudget(newAmount) {
-  if (!newAmount || newAmount <= 0) {
-    throw new Error("Please enter a valid budget.");
-  }
-
-  localStorage.setItem("budget", JSON.stringify(newAmount));
-
-  return newAmount;
-}
-
-export function getRemainingBudget(totalExpense) {
-  const budget = getBudget();
-
-  return budget - totalExpense;
-}
-
-export function isBudgetExceeded(totalExpense) {
-  const budget = getBudget();
-
-  return totalExpense > budget;
-}
-
-export function deleteBudget() {
-  localStorage.removeItem("budget");
-}
+// Delete budget
+export const deleteBudget = async (id) => {
+  const { data } = await api.delete(`/budget/${id}`);
+  return data;
+};

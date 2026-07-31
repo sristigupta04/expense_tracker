@@ -1,23 +1,27 @@
 const express = require("express");
 const router = express.Router();
 
-
 const {
   getDashboardStats,
-  getMonthlyReport,
   getCategoryReport,
+  getMonthlyReport,
   getBudgetReport,
   getTrendAnalysis,
-  
-}= require("../controllers/reportController");
+} = require("../controllers/reportController");
 
+// Dashboard Summary
+router.get("/", getDashboardStats);
 
+// Category Report
+router.get("/category", getCategoryReport);
 
+// Monthly Report
+router.get("/monthly", getMonthlyReport);
 
-router.get("/dashboard",getDashboardStats);
-router.get("monthly",getMonthlyReport);
-router.get("/category/:category",getCategoryReport);
-router.get("/budget",getBudgetReport);
-router.get("/trend",getTrendAnalysis);
+// Budget Report
+router.get("/budget", getBudgetReport);
 
-module.exports= router;
+// Trend Analysis
+router.get("/trend", getTrendAnalysis);
+
+module.exports = router;

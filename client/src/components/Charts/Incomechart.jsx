@@ -1,4 +1,5 @@
 import {
+  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
@@ -29,26 +30,43 @@ export default function IncomeChart({ transactions }) {
   }, []);
 
   return (
-    <div>
-      <h2>Income Chart</h2>
+    <div className="rounded-2xl bg-white p-6 shadow-lg">
 
-      <LineChart width={500} height={300} data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" />
+      <h2 className="mb-6 text-xl font-bold text-slate-800">
+        Income Trend
+      </h2>
 
-        <XAxis dataKey="date" />
+      <div className="h-80">
 
-        <YAxis />
+        <ResponsiveContainer width="100%" height="100%">
 
-        <Tooltip />
+          <LineChart data={chartData}>
 
-        <Legend />
+            <CartesianGrid strokeDasharray="3 3" />
 
-        <Line
-          type="monotone"
-          dataKey="amount"
-          stroke="#8884d8"
-        />
-      </LineChart>
+            <XAxis dataKey="date" />
+
+            <YAxis />
+
+            <Tooltip />
+
+            <Legend />
+
+            <Line
+              type="monotone"
+              dataKey="amount"
+              stroke="#10B981"
+              strokeWidth={3}
+              dot={{ r: 5 }}
+              activeDot={{ r: 8 }}
+            />
+
+          </LineChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
     </div>
   );
 }
