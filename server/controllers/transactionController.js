@@ -1,13 +1,16 @@
 const Transaction = require("../models/Transaction");
 
+// ==========================
 // Create Transaction
-module.exports.addTransaction = async (req, res) => {
+// ==========================
+exports.addTransaction = async (req, res) => {
   try {
     const { title, amount, type, category, date, note } = req.body;
 
     if (!title || !amount || !type || !category || !date) {
       return res.status(400).json({
-        message: "All fields are required",
+        success: false,
+        message: "All fields are required.",
       });
     }
 
@@ -21,52 +24,59 @@ module.exports.addTransaction = async (req, res) => {
     });
 
     res.status(201).json(transaction);
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };
 
+// ==========================
 // Get All Transactions
-module.exports.getTransactions = async (req, res) => {
+// ==========================
+exports.getTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find().sort({
-      date: -1,
+      createdAt: -1,
     });
 
     res.status(200).json(transactions);
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };
 
-// Get Transaction By Id
-module.exports.getTransactionsById = async (req, res) => {
+// ==========================
+// Get Single Transaction
+// ==========================
+exports.getTransactionsById = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
       return res.status(404).json({
-        message: "Transaction not found",
+        success: false,
+        message: "Transaction not found.",
       });
     }
 
     res.status(200).json(transaction);
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };
 
+// ==========================
 // Update Transaction
-module.exports.updateTransaction = async (req, res) => {
+// ==========================
+exports.updateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findByIdAndUpdate(
       req.params.id,
@@ -79,57 +89,61 @@ module.exports.updateTransaction = async (req, res) => {
 
     if (!transaction) {
       return res.status(404).json({
-        message: "Transaction not found",
+        success: false,
+        message: "Transaction not found.",
       });
     }
 
     res.status(200).json(transaction);
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };
 
-// Delete Transaction
-module.exports.deleteTransactionById = async (req, res) => {
+// ==========================
+// Delete One Transaction
+// ==========================
+exports.deleteTransactionById = async (req, res) => {
   try {
-    const transaction = await Transaction.findByIdAndDelete(
-      req.params.id
-    );
+    const transaction = await Transaction.findByIdAndDelete(req.params.id);
 
     if (!transaction) {
       return res.status(404).json({
-        message: "Transaction not found",
+        success: false,
+        message: "Transaction not found.",
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Transaction deleted successfully",
+      message: "Transaction deleted successfully.",
     });
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };
 
+// ==========================
 // Delete All Transactions
-module.exports.deleteTransaction = async (req, res) => {
+// ==========================
+exports.deleteTransaction = async (req, res) => {
   try {
-    await Transaction.deleteMany();
+    await Transaction.deleteMany({});
 
     res.status(200).json({
       success: true,
-      message: "All transactions deleted successfully",
+      message: "All transactions deleted successfully.",
     });
-
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({
-      message: err.message,
+      success: false,
+      message: error.message,
     });
   }
 };

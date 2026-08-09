@@ -3,8 +3,8 @@ import { useState } from "react";
 
 import { useExpense } from "../context/ExpenseContext";
 import Navbar from "../components/Navbar";
-import TransactionForm from "../components/TransactionForm";
-import TransactionTable from "../components/TransactionTable";
+import TransactionForm from "../components/Transactionsform";
+import TransactionTable from "../components/Transactiontable";
 
 export default function Transactions() {
   const {

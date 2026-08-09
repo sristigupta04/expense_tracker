@@ -1,136 +1,89 @@
-const Transaction = require("../models/Transaction");
-const Budget = require("../models/Budget");
+const Category = require("../models/Category");
 
-// Dashboard Summary
-module.exports.getDashboardStats = async (req, res) => {
+// Create Category
+exports.createCategory = async (req, res) => {
   try {
-    const transactions = await Transaction.find();
+    const category = await Category.create(req.body);
 
-    let income = 0;
-    let expense = 0;
-
-    transactions.forEach((item) => {
-      if (item.type === "income") {
-        income += Number(item.amount);
-      } else if (item.type === "expense") {
-        expense += Number(item.amount);
-      }
+    res.status(201).json(category);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
     });
+  }
+};
 
-    const balance = income - expense;
+// Get All Categories
+exports.getCategories = async (req, res) => {
+  try {
+    const categories = await Category.find();
+
+    res.status(200).json(categories);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+// Get Single Category
+exports.getCategoryById = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({
+        message: "Category not found",
+      });
+    }
+
+    res.status(200).json(category);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+// Update Category
+exports.updateCategory = async (req, res) => {
+  try {
+    const category = await Category.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+      }
+    );
+
+    if (!category) {
+      return res.status(404).json({
+        message: "Category not found",
+      });
+    }
+
+    res.status(200).json(category);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+
+// Delete Category
+exports.deleteCategory = async (req, res) => {
+  try {
+    const category = await Category.findByIdAndDelete(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({
+        message: "Category not found",
+      });
+    }
 
     res.status(200).json({
-      income,
-      expense,
-      balance,
+      message: "Category deleted successfully",
     });
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Category Report
-module.exports.getCategoryReport = async (req, res) => {
-  try {
-    const transactions = await Transaction.find({
-      type: "expense",
-    });
-
-    const report = {};
-
-    transactions.forEach((item) => {
-      if (!report[item.category]) {
-        report[item.category] = 0;
-      }
-
-      report[item.category] += Number(item.amount);
-    });
-
-    res.status(200).json(report);
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Monthly Report
-module.exports.getMonthlyReport = async (req, res) => {
-  try {
-    const transactions = await Transaction.find();
-
-    const report = {};
-
-    transactions.forEach((item) => {
-      const month = new Date(item.date).toLocaleString(
-        "default",
-        {
-          month: "short",
-          year: "numeric",
-        }
-      );
-
-      if (!report[month]) {
-        report[month] = 0;
-      }
-
-      report[month] += Number(item.amount);
-    });
-
-    res.status(200).json(report);
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Budget Report
-module.exports.getBudgetReport = async (req, res) => {
-  try {
-    const budgets = await Budget.find();
-    const transactions = await Transaction.find({
-      type: "expense",
-    });
-
-    let totalBudget = 0;
-    let totalExpense = 0;
-
-    budgets.forEach((budget) => {
-      totalBudget += Number(budget.budgetlimit);
-    });
-
-    transactions.forEach((transaction) => {
-      totalExpense += Number(transaction.amount);
-    });
-
-    res.status(200).json({
-      totalBudget,
-      totalExpense,
-      remaining: totalBudget - totalExpense,
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Trend Analysis
-module.exports.getTrendAnalysis = async (req, res) => {
-  try {
-    const transactions = await Transaction.find().sort({
-      date: 1,
-    });
-
-    res.status(200).json(transactions);
-
   } catch (err) {
     res.status(500).json({
       message: err.message,

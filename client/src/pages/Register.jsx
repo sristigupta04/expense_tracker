@@ -64,7 +64,6 @@ export default function Register() {
         email,
         password,
       });
-
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);

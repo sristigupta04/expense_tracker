@@ -16,7 +16,7 @@ export function register(userData) {
   users.push(userData);
 
   localStorage.setItem("users", JSON.stringify(users));
-
+      localStorage.setItem("currentUser", JSON.stringify(userData));
   return userData;
 }
 
