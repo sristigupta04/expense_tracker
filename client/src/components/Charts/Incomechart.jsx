@@ -9,12 +9,12 @@ import {
   Legend,
 } from "recharts";
 
-export default function IncomeChart({ transactions }) {
-  const income = transactions.filter(
+export default function IncomeChart({ transactions = [] }) {
+  const incomeTransactions = transactions.filter(
     (item) => item.type === "income"
   );
 
-  const chartData = income.reduce((acc, item) => {
+  const chartData = incomeTransactions.reduce((acc, item) => {
     const found = acc.find((i) => i.date === item.date);
 
     if (found) {
@@ -29,44 +29,48 @@ export default function IncomeChart({ transactions }) {
     return acc;
   }, []);
 
+  // Sort by date
+  chartData.sort(
+    (a, b) => new Date(a.date) - new Date(b.date)
+  );
+
   return (
     <div className="rounded-2xl bg-white p-6 shadow-lg">
-
       <h2 className="mb-6 text-xl font-bold text-slate-800">
         Income Trend
       </h2>
 
       <div className="h-80">
+        {chartData.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-gray-500">
+            No income transactions found.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
 
-        <ResponsiveContainer width="100%" height="100%">
+              <XAxis dataKey="date" />
 
-          <LineChart data={chartData}>
+              <YAxis />
 
-            <CartesianGrid strokeDasharray="3 3" />
+              <Tooltip />
 
-            <XAxis dataKey="date" />
+              <Legend />
 
-            <YAxis />
-
-            <Tooltip />
-
-            <Legend />
-
-            <Line
-              type="monotone"
-              dataKey="amount"
-              stroke="#10B981"
-              strokeWidth={3}
-              dot={{ r: 5 }}
-              activeDot={{ r: 8 }}
-            />
-
-          </LineChart>
-
-        </ResponsiveContainer>
-
+              <Line
+                type="monotone"
+                dataKey="amount"
+                name="Income"
+                stroke="#10B981"
+                strokeWidth={3}
+                dot={{ r: 5 }}
+                activeDot={{ r: 8 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
-
     </div>
   );
 }

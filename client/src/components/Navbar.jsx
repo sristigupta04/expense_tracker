@@ -90,9 +90,8 @@ export default function Navbar() {
             </p>
 
             <p className="font-semibold text-slate-800">
-              {user?.username || "User"} 👋
-            </p>
-
+  {user?.name} 👋
+</p>
           </div>
 
           <button

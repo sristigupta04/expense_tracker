@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Navbar from "../components/Navbar";
 import SummaryCard from "../components/SummaryCard";
 import TransactionForm from "../components/Transactionsform";
@@ -13,15 +14,16 @@ import { useExpense } from "../context/ExpenseContext";
 
 export default function Dashboard() {
   const {
-    transactions,
-    loading,
-    addExpense,
-    removeExpense,
-  } = useExpense();
-
+  transactions,
+  loading,
+  addExpense,
+  removeExpense,
+  editExpense,
+} = useExpense();
   const { income, expense, balance } =
     calculateBalance(transactions);
-
+ const [selectedTransaction, setSelectedTransaction] =
+  useState(null);
   return (
     <>
       <Navbar />
@@ -58,9 +60,12 @@ export default function Dashboard() {
                   Add Transaction
                 </h2>
 
-                <TransactionForm
-                  addTransaction={addExpense}
-                />
+               <TransactionForm
+  addTransaction={addExpense}
+  editTransaction={editExpense}
+  selectedTransaction={selectedTransaction}
+  clearSelection={() => setSelectedTransaction(null)}
+/>
               </div>
             </div>
 
@@ -73,6 +78,8 @@ export default function Dashboard() {
                 <TransactionTable
                   transactions={transactions}
                   deleteTransaction={removeExpense}
+                  editTransaction={ (transaction) => setSelectedTransaction(transaction) }
+                  
                 />
               </div>
             </div>

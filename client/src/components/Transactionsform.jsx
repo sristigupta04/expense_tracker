@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import {
   DollarSign,
   Calendar,
@@ -22,7 +22,7 @@ const categories = [
   "Other",
 ];
 
-export default function TransactionForm({ addTransaction }) {
+export default function TransactionForm({ addTransaction, editTransaction, selectedTransaction, clearSelection }) {
   const [formData, setFormData] = useState({
     title: "",
     amount: "",
@@ -32,7 +32,17 @@ export default function TransactionForm({ addTransaction }) {
   });
 
   const [error, setError] = useState("");
-
+useEffect(() => {
+  if (selectedTransaction) {
+    setFormData({
+      title: selectedTransaction.title,
+      amount: String(selectedTransaction.amount),
+      category: selectedTransaction.category,
+      type: selectedTransaction.type,
+      date: selectedTransaction.date.slice(0, 10),
+    });
+  }
+}, [selectedTransaction]);
   function handle(e) {
     setFormData({
       ...formData,
@@ -40,25 +50,56 @@ export default function TransactionForm({ addTransaction }) {
     });
   }
 
-  function submit(e) {
-    e.preventDefault();
+ async function submit(e) {
+  e.preventDefault();
 
-    setError("");
+  setError("");
 
-    if (
-      !formData.title.trim() ||
-      !formData.amount ||
-      !formData.category
-    ) {
-      setError("Please fill all required fields.");
-      return;
+  if (!formData.title.trim()) {
+    setError("Title is required.");
+    return;
+  }
+
+  if (
+    formData.amount === "" ||
+    formData.amount === null ||
+    formData.amount === undefined
+  ) {
+    setError("Amount is required.");
+    return;
+  }
+
+  const amount = Number(formData.amount);
+
+  if (isNaN(amount)) {
+    setError("Amount must be a valid number.");
+    return;
+  }
+
+  if (amount <= 0) {
+    setError("Amount must be greater than 0.");
+    return;
+  }
+
+  if (!formData.category) {
+    setError("Please select a category.");
+    return;
+  }
+
+  try {
+    if (selectedTransaction) {
+      await editTransaction(selectedTransaction._id, {
+        ...formData,
+        amount,
+      });
+
+      clearSelection();
+    } else {
+      await addTransaction({
+        ...formData,
+        amount,
+      });
     }
-
-    addTransaction({
-      id: Date.now(),
-      ...formData,
-      amount: Number(formData.amount),
-    });
 
     setFormData({
       title: "",
@@ -67,8 +108,12 @@ export default function TransactionForm({ addTransaction }) {
       type: "expense",
       date: new Date().toISOString().split("T")[0],
     });
-  }
 
+    setError("");
+  } catch (err) {
+    setError(err.message || "Something went wrong.");
+  }
+}
   return (
     <form
       onSubmit={submit}
@@ -101,13 +146,23 @@ export default function TransactionForm({ addTransaction }) {
         </label>
 
         <input
-          type="number"
-          name="amount"
-          value={formData.amount}
-          onChange={handle}
-          placeholder="₹ 0"
-          className="w-full rounded-xl border px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
-        />
+  type="text"
+  name="amount"
+  value={formData.amount}
+  onChange={(e) => {
+    const value = e.target.value;
+
+    // Allow only positive numbers and decimal
+    if (/^\d*\.?\d*$/.test(value)) {
+      setFormData({
+        ...formData,
+        amount: value,
+      });
+    }
+  }}
+  placeholder="₹ 0"
+  className="w-full rounded-xl border px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
+/>
       </div>
 
       {/* Category */}
@@ -208,11 +263,11 @@ export default function TransactionForm({ addTransaction }) {
         </div>
       )}
 
-      <button
-        className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 font-semibold text-white transition hover:opacity-90"
-      >
-        Add Transaction
-      </button>
+  <button
+  className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 font-semibold text-white transition hover:opacity-90"
+>
+  {selectedTransaction ? "Update Transaction" : "Add Transaction"}
+</button>
     </form>
   );
 }

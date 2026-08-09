@@ -10,22 +10,22 @@ const {
   deleteTransaction,
 } = require("../controllers/transactionController");
 
-// Create Transaction
+// Add Transaction
 router.post("/", addTransaction);
 
 // Get All Transactions
 router.get("/", getTransactions);
 
-// Get Transaction By Id
+// Get Transaction By ID
 router.get("/:id", getTransactionsById);
 
 // Update Transaction
 router.put("/:id", updateTransaction);
 
-// Delete Transaction By Id
+// Delete Single Transaction
 router.delete("/:id", deleteTransactionById);
 
-// Delete All Transactions
+// Delete All Transactions (Optional)
 router.delete("/", deleteTransaction);
 
 module.exports = router;
