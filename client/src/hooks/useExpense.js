@@ -1,6 +1,6 @@
-import { useContext } from "react";
-import { ExpenseContext } from "../context/expenseContext";
+
+import { useExpense as useExpenseContext } from "../context/expenseContext";
 
 export default function useExpense() {
-  return useContext(ExpenseContext);
+  return useExpenseContext();
 }
