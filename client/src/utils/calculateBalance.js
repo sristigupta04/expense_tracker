@@ -1,9 +1,19 @@
+
 export default function calculateBalance(transactions = []) {
   let income = 0;
   let expense = 0;
 
+  if (!Array.isArray(transactions)) {
+    return { income: 0, expense: 0, balance: 0 };
+  }
+
   transactions.forEach((transaction) => {
-    const amount = Number(transaction.amount) || 0;
+    if (!transaction) return;
+
+    const amount = Number(transaction.amount);
+
+    // Ignore invalid, infinite, or negative amounts
+    if (!Number.isFinite(amount) || amount < 0) return;
 
     if (transaction.type === "income") {
       income += amount;

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 
 import Navbar from "../components/Navbar";
 import SummaryCard from "../components/SummaryCard";
-import TransactionForm from "../components/Transactionsform";
+import TransactionForm from "../components/TransactionForm";
 import TransactionTable from "../components/TransactionTable";
 
 import CategoryChart from "../components/charts/categorychart";

@@ -1,18 +1,19 @@
+
 import api from "./api";
 
-// Dashboard Summary
+// Get dashboard summary report
 export const getDashboardReport = async () => {
   const { data } = await api.get("/report");
   return data;
 };
 
-// Category Report
+// Get category-wise report
 export const getCategoryReport = async () => {
   const { data } = await api.get("/report/category");
   return data;
 };
 
-// Monthly Report
+// Get monthly report
 export const getMonthlyReport = async () => {
   const { data } = await api.get("/report/monthly");
   return data;

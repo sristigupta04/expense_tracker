@@ -1,56 +1,81 @@
-export function register(userData) {
-  if (!userData.name || !userData.email || !userData.password) {
+
+import api from "./api";
+
+// Register a new user through the backend
+export async function register(userData) {
+  const { name, email, password } = userData;
+
+  if (!name?.trim() || !email?.trim() || !password) {
     throw new Error("All fields are required.");
   }
 
-  const users = JSON.parse(localStorage.getItem("users")) || [];
+  const response = await api.post("/auth/register", {
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    password,
+  });
 
-  const userExists = users.find(
-    (user) => user.email === userData.email
-  );
+  const data = response.data;
 
-  if (userExists) {
-    throw new Error("User already exists.");
+  // Save a token only if the backend actually returns one.
+  if (data.token) {
+    localStorage.setItem("token", data.token);
   }
 
-  users.push(userData);
+  if (data.user) {
+    localStorage.setItem("currentUser", JSON.stringify(data.user));
+    return data.user;
+  }
 
-  localStorage.setItem("users", JSON.stringify(users));
-      localStorage.setItem("currentUser", JSON.stringify(userData));
-  return userData;
+  return data;
 }
 
-export function login(email, password) {
-  const users = JSON.parse(localStorage.getItem("users")) || [];
-
-  const user = users.find(
-    (user) =>
-      user.email === email &&
-      user.password === password
-  );
-
-  if (!user) {
-    throw new Error("Invalid email or password.");
+// Login an existing user through the backend
+export async function login(email, password) {
+  if (!email?.trim() || !password) {
+    throw new Error("Email and password are required.");
   }
 
-  localStorage.setItem(
-    "currentUser",
-    JSON.stringify(user)
-  );
+  const response = await api.post("/auth/login", {
+    email: email.trim().toLowerCase(),
+    password,
+  });
+
+  const data = response.data;
+
+  if (data.token) {
+    localStorage.setItem("token", data.token);
+  }
+
+  const user = data.user || data;
+
+  if (user && (user._id || user.id || user.email || user.name)) {
+    localStorage.setItem("currentUser", JSON.stringify(user));
+  }
 
   return user;
 }
 
+// Logout the current user
 export function logout() {
+  localStorage.removeItem("token");
   localStorage.removeItem("currentUser");
 }
 
+// Return the current user saved in this browser
 export function getCurrentUser() {
-  return JSON.parse(
-    localStorage.getItem("currentUser")
-  );
+  try {
+    const storedUser = localStorage.getItem("currentUser");
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch {
+    localStorage.removeItem("currentUser");
+    return null;
+  }
 }
 
+// Check whether a user and token are available
 export function isAuthenticated() {
-  return getCurrentUser() !== null;
+  return Boolean(
+    localStorage.getItem("token") && getCurrentUser()
+  );
 }

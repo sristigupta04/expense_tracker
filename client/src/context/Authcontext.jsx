@@ -1,50 +1,85 @@
-import { createContext, useContext, useEffect, useState } from "react";
+
 import {
-  login,
-  logout,
+  createContext,
+  useState,
+  useCallback,
+  useMemo,
+  useContext,
+} from "react";
+
+import {
+  login as loginService,
+  logout as logoutService,
   getCurrentUser,
-  isAuthenticated,
+  isAuthenticated as checkAuthentication,
 } from "../services/authService";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(getCurrentUser());
+  const [user, setUser] = useState(() => getCurrentUser());
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setUser(getCurrentUser());
+  const login = useCallback(async (email, password) => {
+    setLoading(true);
+
+    try {
+      const loggedInUser = await loginService(email, password);
+      const currentUser = loggedInUser || getCurrentUser();
+
+      setUser(currentUser);
+
+      return {
+        success: true,
+        user: currentUser,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Login failed. Please try again.",
+      };
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleLogin = async (email, password) => {
+  const logout = useCallback(() => {
     try {
-      const loggedInUser = await login(email, password);
-      setUser(loggedInUser);
-      return true;
-    } catch (err) {
-      console.error(err);
-      return false;
+      logoutService();
+    } finally {
+      setUser(null);
     }
-  };
+  }, []);
 
-  const handleLogout = () => {
-    logout();
-    setUser(null);
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      isAuthenticated: Boolean(user) && checkAuthentication(),
+      login,
+      logout,
+    }),
+    [user, loading, login, logout]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: isAuthenticated(),
-        login: handleLogin,
-        logout: handleLogout,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+
+  if (context === null) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+
+  return context;
 }
+
+export default AuthContext;
