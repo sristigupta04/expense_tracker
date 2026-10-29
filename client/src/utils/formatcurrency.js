@@ -2,7 +2,12 @@
 export default function formatCurrency(amount) {
   const value = Number(amount);
 
-  if (!Number.isFinite(value)) {
+  if (
+    amount === null ||
+    amount === undefined ||
+    amount === "" ||
+    !Number.isFinite(value)
+  ) {
     return "₹0.00";
   }
 

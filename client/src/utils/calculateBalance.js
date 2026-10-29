@@ -11,13 +11,14 @@ export default function calculateBalance(transactions = []) {
     if (!transaction) return;
 
     const amount = Number(transaction.amount);
+    const type = String(transaction.type || "").toLowerCase();
 
-    // Ignore invalid, infinite, or negative amounts
+    // Ignore invalid, infinite, or negative amounts.
     if (!Number.isFinite(amount) || amount < 0) return;
 
-    if (transaction.type === "income") {
+    if (type === "income") {
       income += amount;
-    } else if (transaction.type === "expense") {
+    } else if (type === "expense") {
       expense += amount;
     }
   });

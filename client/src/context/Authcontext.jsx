@@ -27,6 +27,15 @@ export function AuthProvider({ children }) {
       const loggedInUser = await loginService(email, password);
       const currentUser = loggedInUser || getCurrentUser();
 
+      if (!currentUser || !checkAuthentication()) {
+        setUser(null);
+
+        return {
+          success: false,
+          message: "Login failed. Please check your credentials.",
+        };
+      }
+
       setUser(currentUser);
 
       return {
@@ -34,6 +43,8 @@ export function AuthProvider({ children }) {
         user: currentUser,
       };
     } catch (error) {
+      setUser(null);
+
       return {
         success: false,
         message:
@@ -51,18 +62,52 @@ export function AuthProvider({ children }) {
       logoutService();
     } finally {
       setUser(null);
+      setLoading(false);
     }
+  }, []);
+
+  const refreshUser = useCallback(() => {
+    try {
+      const currentUser = getCurrentUser();
+      setUser(currentUser || null);
+      return currentUser || null;
+    } catch (error) {
+      console.error("Unable to refresh user:", error);
+      setUser(null);
+      return null;
+    }
+  }, []);
+
+  const updateUser = useCallback((updatedUser) => {
+    if (!updatedUser || typeof updatedUser !== "object") {
+      return;
+    }
+
+    setUser((previousUser) => ({
+      ...(previousUser || {}),
+      ...updatedUser,
+    }));
   }, []);
 
   const value = useMemo(
     () => ({
       user,
       loading,
-      isAuthenticated: Boolean(user) && checkAuthentication(),
+      isAuthenticated:
+        Boolean(user) && checkAuthentication(),
       login,
       logout,
+      refreshUser,
+      updateUser,
     }),
-    [user, loading, login, logout]
+    [
+      user,
+      loading,
+      login,
+      logout,
+      refreshUser,
+      updateUser,
+    ]
   );
 
   return (
@@ -76,7 +121,9 @@ export function useAuth() {
   const context = useContext(AuthContext);
 
   if (context === null) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error(
+      "useAuth must be used within an AuthProvider"
+    );
   }
 
   return context;

@@ -10,10 +10,12 @@ import {
   X,
   AlertCircle,
   LoaderCircle,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
-import BudgetCard from "../components/BudgetCard";
-import Loader from "../components/Loader";
+import BudgetCard from "../components/Budget/BudgetCard";
+import Loader from "../components/common/Loader";
 import {
   getBudgets,
   createBudget,
@@ -35,11 +37,36 @@ const categories = [
   "Other",
 ];
 
+function formatCurrency(amount) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+}
+
+function normalizeBudgets(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.budgets)) return data.budgets;
+  if (Array.isArray(data?.data?.budgets)) return data.data.budgets;
+  return [];
+}
+
+function getErrorMessage(error, fallback) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+}
+
 export default function Budgets() {
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
 
@@ -56,13 +83,14 @@ export default function Budgets() {
 
     try {
       const data = await getBudgets();
-      setBudgets(Array.isArray(data) ? data : []);
+      setBudgets(normalizeBudgets(data));
     } catch (err) {
       console.error("Failed to fetch budgets:", err);
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
+        getErrorMessage(
+          err,
           "Unable to load budgets. Please try again."
+        )
       );
     } finally {
       setLoading(false);
@@ -80,16 +108,16 @@ export default function Budgets() {
     setError("");
   };
 
-  // Add or update budget
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    setSuccess("");
 
     const cleanCategory = category.trim();
     const limit = Number(budgetLimit);
 
-    if (!cleanCategory) {
-      setError("Please select a budget category.");
+    if (!categories.includes(cleanCategory)) {
+      setError("Please select a valid budget category.");
       return;
     }
 
@@ -98,49 +126,101 @@ export default function Budgets() {
       return;
     }
 
+    const duplicateBudget = budgets.some((item) => {
+      const sameId =
+        String(item._id || item.id) === String(editingId);
+
+      return (
+        !sameId &&
+        String(item.category || "").toLowerCase() ===
+          cleanCategory.toLowerCase() &&
+        Number(item.month) ===
+          Number(editingId
+            ? budgets.find(
+                (b) => String(b._id || b.id) === String(editingId)
+              )?.month ?? month
+            : month) &&
+        Number(item.year) === year
+      );
+    });
+
+    if (duplicateBudget) {
+      setError(
+        "A budget for this category already exists for this month."
+      );
+      return;
+    }
+
     setSaving(true);
 
     try {
       const existingBudget = budgets.find(
-        (item) => String(item._id || item.id) === String(editingId)
+        (item) =>
+          String(item._id || item.id) === String(editingId)
       );
 
       const payload = {
         category: cleanCategory,
-        budgetlimit: limit,
+        limit,
         month: existingBudget?.month ?? month,
         year: existingBudget?.year ?? year,
       };
 
       if (editingId) {
-        const updated = await updateBudget(editingId, payload);
+        const response = await updateBudget(editingId, payload);
+        const updatedBudget = response?.budget ?? response?.data?.budget ?? response;
 
-        setBudgets((previous) =>
-          previous.map((item) =>
-            String(item._id || item.id) === String(editingId)
-              ? updated
-              : item
-          )
-        );
+        if (
+          updatedBudget &&
+          typeof updatedBudget === "object" &&
+          (updatedBudget._id || updatedBudget.id)
+        ) {
+          setBudgets((previous) =>
+            previous.map((item) =>
+              String(item._id || item.id) === String(editingId)
+                ? { ...item, ...updatedBudget }
+                : item
+            )
+          );
+        } else {
+          await fetchBudgets();
+        }
+
+        setSuccess("Budget updated successfully.");
       } else {
-        const created = await createBudget(payload);
-        setBudgets((previous) => [created, ...previous]);
+        const response = await createBudget(payload);
+        const createdBudget = response?.budget ?? response?.data?.budget ?? response;
+
+        if (
+          createdBudget &&
+          typeof createdBudget === "object" &&
+          (createdBudget._id || createdBudget.id)
+        ) {
+          setBudgets((previous) => [
+            createdBudget,
+            ...previous,
+          ]);
+        } else {
+          await fetchBudgets();
+        }
+
+        setSuccess("Budget created successfully.");
       }
 
       resetForm();
     } catch (err) {
       console.error("Failed to save budget:", err);
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
+        getErrorMessage(
+          err,
           "Unable to save budget. Please try again."
+        )
       );
     } finally {
       setSaving(false);
     }
   }
 
-  // Edit budget
   function handleEdit(id) {
     const budget = budgets.find(
       (item) => String(item._id || item.id) === String(id)
@@ -150,26 +230,32 @@ export default function Budgets() {
 
     setEditingId(id);
     setCategory(budget.category || "");
-    setBudgetLimit(String(budget.budgetlimit ?? budget.limit ?? ""));
+    setBudgetLimit(
+      String(budget.limit ?? budget.budgetlimit ?? "")
+    );
     setError("");
+    setSuccess("");
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Delete budget
   async function handleDelete(id) {
     if (!id) {
       setError("Budget ID is missing.");
       return;
     }
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this budget?"
-    );
-
-    if (!confirmed) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this budget?"
+      )
+    ) {
+      return;
+    }
 
     setError("");
+    setSuccess("");
+    setDeletingId(id);
 
     try {
       await deleteBudget(id);
@@ -183,53 +269,53 @@ export default function Budgets() {
       if (String(editingId) === String(id)) {
         resetForm();
       }
+
+      setSuccess("Budget deleted successfully.");
     } catch (err) {
       console.error("Failed to delete budget:", err);
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
+        getErrorMessage(
+          err,
           "Unable to delete budget. Please try again."
+        )
       );
+    } finally {
+      setDeletingId(null);
     }
   }
 
-  // Filter budgets by category
   const filteredBudgets = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return budgets.filter((budget) =>
-      (budget.category || budget.title || "")
+      String(budget.category || budget.title || "")
         .toLowerCase()
         .includes(query)
     );
   }, [budgets, search]);
 
-  // Summary values
-  const totalBudget = budgets.reduce(
-    (total, budget) =>
-      total + (Number(budget.budgetlimit ?? budget.limit) || 0),
-    0
-  );
+  const summary = useMemo(() => {
+    return budgets.reduce(
+      (result, budget) => {
+        result.totalBudget +=
+          Number(budget.limit ?? budget.budgetlimit) || 0;
 
-  const totalSpent = budgets.reduce(
-    (total, budget) => total + (Number(budget.spent) || 0),
-    0
-  );
+        result.totalSpent +=
+          Number(budget.spent ?? budget.spentAmount) || 0;
 
-  const totalRemaining = totalBudget - totalSpent;
+        return result;
+      },
+      { totalBudget: 0, totalSpent: 0 }
+    );
+  }, [budgets]);
 
-  const currency = (amount) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const totalRemaining =
+    summary.totalBudget - summary.totalSpent;
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Page heading */}
-        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-600">
               <Wallet size={17} />
@@ -252,50 +338,60 @@ export default function Budgets() {
               year: "numeric",
             })}
           </div>
-        </div>
+        </header>
 
-        {/* Error message */}
-        {error && (
+        {(error || success) && (
           <div
-            role="alert"
-            className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            role={error ? "alert" : "status"}
+            className={`mb-6 flex items-start gap-3 rounded-xl border p-4 text-sm ${
+              error
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
           >
-            <AlertCircle size={19} className="mt-0.5 shrink-0" />
-            <p className="flex-1">{error}</p>
+            {error ? (
+              <AlertCircle size={19} className="mt-0.5 shrink-0" />
+            ) : (
+              <Target size={19} className="mt-0.5 shrink-0" />
+            )}
+
+            <p className="flex-1">{error || success}</p>
 
             <button
               type="button"
-              onClick={() => setError("")}
-              aria-label="Dismiss error"
-              className="rounded-md p-1 hover:bg-red-100"
+              onClick={() => {
+                setError("");
+                setSuccess("");
+              }}
+              aria-label="Dismiss message"
+              className="rounded-md p-1 hover:bg-black/5"
             >
               <X size={17} />
             </button>
           </div>
         )}
 
-        {/* Summary cards */}
         <section
           aria-label="Budget summary"
           className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
         >
           <SummaryCard
             label="Total budget"
-            amount={currency(totalBudget)}
+            amount={formatCurrency(summary.totalBudget)}
             icon={Wallet}
             iconStyle="bg-blue-50 text-blue-600"
           />
 
           <SummaryCard
             label="Total spent"
-            amount={currency(totalSpent)}
+            amount={formatCurrency(summary.totalSpent)}
             icon={TrendingUp}
             iconStyle="bg-amber-50 text-amber-600"
           />
 
           <SummaryCard
             label={totalRemaining < 0 ? "Over budget" : "Remaining"}
-            amount={currency(Math.abs(totalRemaining))}
+            amount={formatCurrency(Math.abs(totalRemaining))}
             icon={IndianRupee}
             iconStyle={
               totalRemaining < 0
@@ -305,18 +401,18 @@ export default function Budgets() {
           />
         </section>
 
-        {/* Add / Edit budget form */}
-        <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="mb-8 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <Plus size={21} />
+                {editingId ? <Pencil size={20} /> : <Plus size={21} />}
               </div>
 
               <div>
                 <h2 className="font-bold text-slate-900">
                   {editingId ? "Edit budget" : "Create a budget"}
                 </h2>
+
                 <p className="mt-1 text-sm text-slate-500">
                   {editingId
                     ? "Update your category and spending limit."
@@ -338,12 +434,15 @@ export default function Budgets() {
 
                 <select
                   id="budget-category"
+                  name="category"
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  className="block w-full cursor-pointer appearance-auto rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                 >
-                  <option value="">Choose a category</option>
+                  <option value="" disabled>
+                    -- Choose a category --
+                  </option>
 
                   {categories.map((item) => (
                     <option key={item} value={item}>
@@ -370,7 +469,7 @@ export default function Budgets() {
                   onChange={(event) => setBudgetLimit(event.target.value)}
                   placeholder="e.g. 10000"
                   required
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                 />
               </div>
 
@@ -386,7 +485,11 @@ export default function Budgets() {
                     <Plus size={17} />
                   )}
 
-                  {saving ? "Saving..." : editingId ? "Save changes" : "Add budget"}
+                  {saving
+                    ? "Saving..."
+                    : editingId
+                      ? "Save changes"
+                      : "Add budget"}
                 </button>
 
                 {editingId && (
@@ -394,7 +497,7 @@ export default function Budgets() {
                     type="button"
                     onClick={resetForm}
                     disabled={saving}
-                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                   >
                     Cancel
                   </button>
@@ -404,7 +507,6 @@ export default function Budgets() {
           </form>
         </section>
 
-        {/* Budgets list heading and search */}
         <section>
           <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -422,14 +524,13 @@ export default function Budgets() {
                 size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
-
               <input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search category..."
                 aria-label="Search budgets by category"
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
           </div>
@@ -451,7 +552,7 @@ export default function Budgets() {
               <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
                 {search
                   ? "Try another category name."
-                  : "Create your first budget to start tracking your monthly spending."}
+                  : "Create your first budget to start tracking monthly spending."}
               </p>
 
               {search && (
@@ -467,24 +568,33 @@ export default function Budgets() {
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {filteredBudgets.map((budget) => {
-                const limit = Number(
-                  budget.budgetlimit ?? budget.limit
-                ) || 0;
-
-                const spent = Number(budget.spent) || 0;
+                const id = budget._id || budget.id;
 
                 return (
-                  <BudgetCard
-                    key={budget._id || budget.id}
-                    budget={{
-                      ...budget,
-                      title: budget.category || budget.title,
-                      limit,
-                      spent,
-                    }}
-                    onDelete={handleDelete}
-                    onEdit={handleEdit}
-                  />
+                  <div key={id || budget.category} className="relative min-w-0">
+                    <BudgetCard
+                      budget={{
+                        ...budget,
+                        title: budget.category || budget.title,
+                        limit: Number(budget.limit ?? budget.budgetlimit) || 0,
+                        spent: Number(budget.spent ?? budget.spentAmount) || 0,
+                      }}
+                      onDelete={() => handleDelete(id)}
+                      onEdit={() => handleEdit(id)}
+                    />
+
+                    {deletingId === id && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/80">
+                        <LoaderCircle
+                          size={25}
+                          className="animate-spin text-blue-600"
+                        />
+                        <span className="ml-2 text-sm font-medium text-slate-600">
+                          Deleting...
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -505,10 +615,7 @@ function SummaryCard({ label, amount, icon: Icon, iconStyle }) {
             {amount}
           </p>
         </div>
-
-        <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconStyle}`}
-        >
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconStyle}`}>
           <Icon size={23} />
         </div>
       </div>

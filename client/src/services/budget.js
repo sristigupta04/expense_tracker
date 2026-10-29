@@ -9,6 +9,10 @@ export const getBudgets = async () => {
 
 // Create a new budget
 export const createBudget = async (budget) => {
+  if (!budget || typeof budget !== "object") {
+    throw new Error("Valid budget details are required.");
+  }
+
   const { data } = await api.post("/budget", budget);
   return data;
 };
@@ -19,11 +23,15 @@ export const updateBudget = async (id, budget) => {
     throw new Error("Budget ID is required to update a budget.");
   }
 
+  if (!budget || typeof budget !== "object") {
+    throw new Error("Valid budget details are required.");
+  }
+
   const { data } = await api.put(`/budget/${id}`, budget);
   return data;
 };
 
-// Delete a budget
+// Delete an existing budget
 export const deleteBudget = async (id) => {
   if (!id) {
     throw new Error("Budget ID is required to delete a budget.");
