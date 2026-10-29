@@ -1,27 +1,25 @@
+
 const express = require("express");
 const router = express.Router();
 
+const authMiddleware = require("../middleware/auth");
+
 const {
-  getDashboardStats,
+  getDashboardReport,
   getCategoryReport,
   getMonthlyReport,
-  getBudgetReport,
-  getTrendAnalysis,
 } = require("../controllers/reportController");
 
-// Dashboard Summary
-router.get("/", getDashboardStats);
+// All report routes require authentication
+router.use(authMiddleware);
 
-// Category Report
+// GET /api/report
+router.get("/", getDashboardReport);
+
+// GET /api/report/category
 router.get("/category", getCategoryReport);
 
-// Monthly Report
+// GET /api/report/monthly
 router.get("/monthly", getMonthlyReport);
-
-// Budget Report
-router.get("/budget", getBudgetReport);
-
-// Trend Analysis
-router.get("/trend", getTrendAnalysis);
 
 module.exports = router;

@@ -1,5 +1,8 @@
+
 const express = require("express");
 const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
 
 const {
   addTransaction,
@@ -10,22 +13,25 @@ const {
   deleteTransaction,
 } = require("../controllers/transactionController");
 
-// Add Transaction
-router.post("/", addTransaction);
+// All routes require authentication
+router.use(authMiddleware);
 
-// Get All Transactions
+// GET /api/transactions
 router.get("/", getTransactions);
 
-// Get Transaction By ID
+// POST /api/transactions
+router.post("/", addTransaction);
+
+// DELETE /api/transactions/all
+router.delete("/all", deleteTransaction);
+
+// GET /api/transactions/:id
 router.get("/:id", getTransactionsById);
 
-// Update Transaction
+// PUT /api/transactions/:id
 router.put("/:id", updateTransaction);
 
-// Delete Single Transaction
+// DELETE /api/transactions/:id
 router.delete("/:id", deleteTransactionById);
-
-// Delete All Transactions (Optional)
-router.delete("/", deleteTransaction);
 
 module.exports = router;

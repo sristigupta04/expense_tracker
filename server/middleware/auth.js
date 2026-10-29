@@ -1,35 +1,43 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
 
-module.exports.auth = async (req, res, next) => {
+const jwt = require("jsonwebtoken");
+
+const authMiddleware = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
-        message: "Authorization token missing",
+        success: false,
+        message: "Authentication required. Please log in.",
       });
     }
 
     const token = authHeader.split(" ")[1];
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT_SECRET is missing in server .env",
       });
     }
 
-    req.user = user;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+    };
 
     next();
-
-  } catch (err) {
+  } catch (error) {
     return res.status(401).json({
-      message: "Unauthorized",
+      success: false,
+      message:
+        error.name === "TokenExpiredError"
+          ? "Session expired. Please log in again."
+          : "Invalid authentication token.",
     });
   }
 };
+
+module.exports = authMiddleware;

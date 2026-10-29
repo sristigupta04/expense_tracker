@@ -1,119 +1,163 @@
+
 const Transaction = require("../models/Transaction");
-const Budget = require("../models/Budget");
 
-// Dashboard Report
-module.exports.getDashboardStats = async (req, res) => {
+// GET /api/report
+const getDashboardReport = async (req, res) => {
   try {
-    const transactions = await Transaction.find();
+    const userId = req.user?.id;
 
-    let income = 0;
-    let expense = 0;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
-    transactions.forEach((item) => {
-      if (item.type === "income") {
-        income += Number(item.amount);
-      } else if (item.type === "expense") {
-        expense += Number(item.amount);
-      }
-    });
+    const transactions = await Transaction.find({ user: userId }).lean();
 
-    const balance = income - expense;
-
-    res.status(200).json({
-      income,
-      expense,
-      balance,
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Category Report
-module.exports.getCategoryReport = async (req, res) => {
-  try {
-    const transactions = await Transaction.find();
-
-    const report = {};
-
-    transactions.forEach((item) => {
-      if (item.type === "expense") {
-        report[item.category] =
-          (report[item.category] || 0) +
-          Number(item.amount);
-      }
-    });
-
-    res.status(200).json(report);
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Monthly Report
-module.exports.getMonthlyReport = async (req, res) => {
-  try {
-    const transactions = await Transaction.find();
-
-    const report = {};
-
-    transactions.forEach((item) => {
-      const month = item.date.toISOString().slice(0, 7);
-
-      report[month] =
-        (report[month] || 0) +
-        Number(item.amount);
-    });
-
-    res.status(200).json(report);
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
-    });
-  }
-};
-
-// Budget Report
-module.exports.getBudgetReport = async (req, res) => {
-  try {
-    const budgets = await Budget.find();
-    const transactions = await Transaction.find();
-
-    let totalBudget = 0;
+    let totalIncome = 0;
     let totalExpense = 0;
 
-    budgets.forEach((budget) => {
-      totalBudget += Number(budget.budgetlimit);
-    });
+    for (const transaction of transactions) {
+      const amount = Number(transaction.amount);
 
-    transactions.forEach((transaction) => {
-      if (transaction.type === "expense") {
-        totalExpense += Number(transaction.amount);
+      if (!Number.isFinite(amount)) continue;
+
+      if (transaction.type === "income") {
+        totalIncome += amount;
+      } else if (transaction.type === "expense") {
+        totalExpense += amount;
       }
-    });
+    }
 
-    res.status(200).json({
-      totalBudget,
-      totalExpense,
-      remaining: totalBudget - totalExpense,
+    return res.status(200).json({
+      success: true,
+      report: {
+        totalIncome,
+        totalExpense,
+        balance: totalIncome - totalExpense,
+        transactionCount: transactions.length,
+      },
     });
-
-  } catch (err) {
-    res.status(500).json({
-      message: err.message,
+  } catch (error) {
+    console.error("Dashboard report error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate dashboard report",
     });
   }
 };
 
-module.exports.getTrendAnalysis = async (req, res) => {
-  res.status(200).json({
-    message: "Trend Analysis",
-  });
+// GET /api/report/category
+const getCategoryReport = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const transactions = await Transaction.find({
+      user: userId,
+      type: "expense",
+    })
+      .select("category amount")
+      .lean();
+
+    const categoryTotals = {};
+
+    for (const transaction of transactions) {
+      const category = transaction.category || "Other";
+      const amount = Number(transaction.amount);
+
+      if (!Number.isFinite(amount)) continue;
+
+      categoryTotals[category] =
+        (categoryTotals[category] || 0) + amount;
+    }
+
+    const categories = Object.entries(categoryTotals).map(
+      ([category, total]) => ({ category, total })
+    );
+
+    return res.status(200).json({
+      success: true,
+      categories,
+    });
+  } catch (error) {
+    console.error("Category report error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate category report",
+    });
+  }
+};
+
+// GET /api/report/monthly
+const getMonthlyReport = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const transactions = await Transaction.find({ user: userId })
+      .select("amount type date")
+      .sort({ date: 1 })
+      .lean();
+
+    const monthlyTotals = {};
+
+    for (const transaction of transactions) {
+      const date = new Date(transaction.date);
+
+      if (Number.isNaN(date.getTime())) continue;
+
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}`;
+
+      if (!monthlyTotals[monthKey]) {
+        monthlyTotals[monthKey] = {
+          month: monthKey,
+          income: 0,
+          expense: 0,
+        };
+      }
+
+      const amount = Number(transaction.amount);
+
+      if (!Number.isFinite(amount)) continue;
+
+      if (transaction.type === "income") {
+        monthlyTotals[monthKey].income += amount;
+      } else if (transaction.type === "expense") {
+        monthlyTotals[monthKey].expense += amount;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      monthlyReports: Object.values(monthlyTotals),
+    });
+  } catch (error) {
+    console.error("Monthly report error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate monthly report",
+    });
+  }
+};
+
+module.exports = {
+  getDashboardReport,
+  getCategoryReport,
+  getMonthlyReport,
 };

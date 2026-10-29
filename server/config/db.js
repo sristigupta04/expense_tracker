@@ -1,15 +1,21 @@
+
 const mongoose = require("mongoose");
 
-const MONGO_URL = "mongodb://127.0.0.1:27017/client";
+const connectDB = async () => {
+  try {
+    const mongoURL = process.env.MONGO_URL;
 
-main().then(()=>{
-console.log("successufull connect")
-})
-.catch((err)=>{
-    console.error("error found");
-})
+    if (!mongoURL) {
+      throw new Error("MONGO_URL is missing from .env");
+    }
 
-async function main() {
-     await mongoose.connect(MONGO_URL);
-}
+    await mongoose.connect(mongoURL);
 
+    console.log("MongoDB connected successfully");
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    process.exit(1);
+  }
+};
+
+module.exports = connectDB;
