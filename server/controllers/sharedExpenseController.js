@@ -1,6 +1,5 @@
-
 const mongoose = require("mongoose");
-const User = require("../models/User");
+const User = require("../models/user");
 const SharedGroup = require("../models/SharedGroup");
 const SharedExpense = require("../models/SharedExpense");
 const Settlement = require("../models/Settlement");
@@ -19,22 +18,36 @@ async function getMemberGroup(groupId, userId) {
   });
 }
 
-// Create a group. Members are invited by registered email.
-exports.createGroup = async (req, res) => {
+function requireUser(req, res) {
+  const userId = getUserId(req);
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required. Please log in again.",
+    });
+    return null;
+  }
+
+  return userId;
+}
+
+exports.createGroup = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
     const name = String(req.body.name || "").trim();
     const description = String(req.body.description || "").trim();
     const emails = Array.isArray(req.body.memberEmails)
       ? req.body.memberEmails
       : [];
 
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
     if (!name) {
-      return res.status(400).json({ message: "Group name is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Group name is required.",
+      });
     }
 
     const normalizedEmails = [
@@ -46,25 +59,32 @@ exports.createGroup = async (req, res) => {
     ];
 
     const users = normalizedEmails.length
-      ? await User.find({ email: { $in: normalizedEmails } }).select("_id email")
+      ? await User.find({
+          email: { $in: normalizedEmails },
+        }).select("_id email")
       : [];
 
-    const foundEmails = new Set(users.map((user) => user.email.toLowerCase()));
+    const foundEmails = new Set(
+      users.map((user) => user.email.toLowerCase())
+    );
+
     const missingEmails = normalizedEmails.filter(
       (email) => !foundEmails.has(email)
     );
 
     if (missingEmails.length) {
       return res.status(400).json({
-        message: "Some emails are not registered",
+        success: false,
+        message: "Some emails are not registered.",
         missingEmails,
       });
     }
 
     const members = [
-      ...new Set(
-        [String(userId), ...users.map((user) => String(user._id))]
-      ),
+      ...new Set([
+        String(userId),
+        ...users.map((user) => String(user._id)),
+      ]),
     ];
 
     const group = await SharedGroup.create({
@@ -78,33 +98,41 @@ exports.createGroup = async (req, res) => {
       .populate("createdBy", "name email")
       .populate("members", "name email");
 
-    return res.status(201).json({ group: populated });
+    return res.status(201).json({
+      success: true,
+      group: populated,
+    });
   } catch (error) {
-    console.error("Create shared group:", error);
-    return res.status(500).json({ message: "Could not create group" });
+    next(error);
   }
 };
 
-// Get only groups the current user belongs to.
-exports.getGroups = async (req, res) => {
+exports.getGroups = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
-    const groups = await SharedGroup.find({ members: userId })
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const groups = await SharedGroup.find({
+      members: userId,
+    })
       .populate("createdBy", "name email")
       .populate("members", "name email")
       .sort({ updatedAt: -1 });
 
-    return res.json({ groups });
+    return res.status(200).json({
+      success: true,
+      groups,
+    });
   } catch (error) {
-    console.error("Get shared groups:", error);
-    return res.status(500).json({ message: "Could not load groups" });
+    next(error);
   }
 };
 
-// Create an expense and calculate the member shares.
-exports.createSharedExpense = async (req, res) => {
+exports.createSharedExpense = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
     const {
       groupId,
       title,
@@ -120,40 +148,74 @@ exports.createSharedExpense = async (req, res) => {
     const amount = Number(totalAmount);
 
     if (!mongoose.isValidObjectId(groupId)) {
-      return res.status(400).json({ message: "Valid groupId is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Valid groupId is required.",
+      });
     }
 
-    if (!title?.trim() || !Number.isFinite(amount) || amount <= 0) {
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      totalAmount === "" ||
+      totalAmount === null ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       return res.status(400).json({
-        message: "Title and a positive total amount are required",
+        success: false,
+        message: "Title and a positive total amount are required.",
       });
     }
 
     if (!["equal", "custom", "percentage"].includes(splitType)) {
-      return res.status(400).json({ message: "Invalid split type" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid split type.",
+      });
+    }
+
+    let expenseDate = new Date();
+
+    if (date !== undefined && date !== null && date !== "") {
+      expenseDate = new Date(date);
+
+      if (Number.isNaN(expenseDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid expense date.",
+        });
+      }
     }
 
     const group = await getMemberGroup(groupId, userId);
 
     if (!group) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    const payerId = String(paidBy || userId);
-
-    if (!group.members.some((member) => String(member) === payerId)) {
-      return res.status(400).json({
-        message: "Payer must belong to this group",
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
       });
     }
 
-    const memberIds = group.members.map(String);
+    const payerId = String(paidBy || userId);
+    const memberIds = group.members.map((member) => String(member));
+
+    if (!memberIds.includes(payerId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Payer must belong to this group.",
+      });
+    }
+
     let calculatedSplits = [];
 
     if (splitType === "equal") {
-      const base = Math.floor((amount / memberIds.length) * 100) / 100;
-      let remainingCents = Math.round(amount * 100) -
-        Math.round(base * 100) * memberIds.length;
+      const baseCents = Math.floor(
+        Math.round(amount * 100) / memberIds.length
+      );
+
+      let remainingCents =
+        Math.round(amount * 100) - baseCents * memberIds.length;
 
       calculatedSplits = memberIds.map((memberId) => {
         const extraCent = remainingCents > 0 ? 1 : 0;
@@ -161,14 +223,18 @@ exports.createSharedExpense = async (req, res) => {
 
         return {
           user: memberId,
-          amount: roundMoney(base + extraCent / 100),
+          amount: (baseCents + extraCent) / 100,
           percentage: null,
         };
       });
     } else {
-      if (!Array.isArray(splits) || splits.length !== memberIds.length) {
+      if (
+        !Array.isArray(splits) ||
+        splits.length !== memberIds.length
+      ) {
         return res.status(400).json({
-          message: "Provide a split for every group member",
+          success: false,
+          message: "Provide a split for every group member.",
         });
       }
 
@@ -180,52 +246,87 @@ exports.createSharedExpense = async (req, res) => {
         !memberIds.every((id) => uniqueIds.has(id))
       ) {
         return res.status(400).json({
-          message: "Each group member must appear exactly once in splits",
+          success: false,
+          message: "Each group member must appear exactly once in splits.",
         });
       }
 
-      if (
-        splits.some(
+      if (splitType === "custom") {
+        const invalidAmount = splits.some(
           (split) =>
+            split.amount === "" ||
+            split.amount === null ||
+            split.amount === undefined ||
             !Number.isFinite(Number(split.amount)) ||
             Number(split.amount) < 0
-        )
-      ) {
-        return res.status(400).json({ message: "Invalid split amount" });
-      }
+        );
 
-      if (splitType === "custom") {
+        if (invalidAmount) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid custom split amount.",
+          });
+        }
+
         calculatedSplits = splits.map((split) => ({
           user: String(split.user),
           amount: roundMoney(Number(split.amount)),
           percentage: null,
         }));
 
-        const sum = roundMoney(
-          calculatedSplits.reduce((total, split) => total + split.amount, 0)
+        const splitTotal = roundMoney(
+          calculatedSplits.reduce(
+            (sum, split) => sum + split.amount,
+            0
+          )
         );
 
-        if (sum !== roundMoney(amount)) {
+        if (splitTotal !== roundMoney(amount)) {
           return res.status(400).json({
-            message: "Custom split amounts must equal the total",
-            splitTotal: sum,
+            success: false,
+            message: "Custom split amounts must equal the total.",
+            splitTotal,
             totalAmount: roundMoney(amount),
           });
         }
       } else {
-        const percentages = splits.map((split) => Number(split.percentage));
+        const invalidPercentage = splits.some((split) => {
+          if (
+            split.percentage === "" ||
+            split.percentage === null ||
+            split.percentage === undefined
+          ) {
+            return true;
+          }
 
-        if (
-          percentages.some(
-            (percentage) =>
-              !Number.isFinite(percentage) ||
-              percentage < 0 ||
-              percentage > 100
-          ) ||
-          roundMoney(percentages.reduce((sum, value) => sum + value, 0)) !== 100
-        ) {
+          const percentage = Number(split.percentage);
+
+          return (
+            !Number.isFinite(percentage) ||
+            percentage < 0 ||
+            percentage > 100
+          );
+        });
+
+        if (invalidPercentage) {
           return res.status(400).json({
-            message: "Percentages must add up to exactly 100%",
+            success: false,
+            message: "Each percentage must be between 0 and 100.",
+          });
+        }
+
+        const percentageTotal = roundMoney(
+          splits.reduce(
+            (sum, split) => sum + Number(split.percentage),
+            0
+          )
+        );
+
+        if (percentageTotal !== 100) {
+          return res.status(400).json({
+            success: false,
+            message: "Percentages must add up to exactly 100%.",
+            percentageTotal,
           });
         }
 
@@ -237,15 +338,19 @@ exports.createSharedExpense = async (req, res) => {
           ),
         }));
 
-        // Correct any rounding difference on the final share.
         const difference = roundMoney(
           amount -
-            calculatedSplits.reduce((sum, split) => sum + split.amount, 0)
+            calculatedSplits.reduce(
+              (sum, split) => sum + split.amount,
+              0
+            )
         );
 
-        calculatedSplits[calculatedSplits.length - 1].amount = roundMoney(
-          calculatedSplits[calculatedSplits.length - 1].amount + difference
-        );
+        calculatedSplits[calculatedSplits.length - 1].amount =
+          roundMoney(
+            calculatedSplits[calculatedSplits.length - 1].amount +
+              difference
+          );
       }
     }
 
@@ -256,10 +361,10 @@ exports.createSharedExpense = async (req, res) => {
       title: title.trim(),
       totalAmount: roundMoney(amount),
       category: category || "Other",
-      date: date ? new Date(date) : new Date(),
+      date: expenseDate,
       splitType,
       splits: calculatedSplits,
-      note: note || "",
+      note: typeof note === "string" ? note.trim() : "",
     });
 
     const populated = await SharedExpense.findById(expense._id)
@@ -267,45 +372,58 @@ exports.createSharedExpense = async (req, res) => {
       .populate("createdBy", "name email")
       .populate("splits.user", "name email");
 
-    return res.status(201).json({ expense: populated });
+    return res.status(201).json({
+      success: true,
+      expense: populated,
+    });
   } catch (error) {
-    console.error("Create shared expense:", error);
-    return res.status(500).json({ message: "Could not create expense" });
+    next(error);
   }
 };
 
-// List group expenses.
-exports.getGroupExpenses = async (req, res) => {
+exports.getGroupExpenses = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
     const group = await getMemberGroup(req.params.groupId, userId);
 
     if (!group) {
-      return res.status(404).json({ message: "Group not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
+      });
     }
 
-    const expenses = await SharedExpense.find({ group: group._id })
+    const expenses = await SharedExpense.find({
+      group: group._id,
+    })
       .populate("paidBy", "name email")
       .populate("createdBy", "name email")
       .populate("splits.user", "name email")
       .sort({ date: -1, createdAt: -1 });
 
-    return res.json({ expenses });
+    return res.status(200).json({
+      success: true,
+      expenses,
+    });
   } catch (error) {
-    console.error("Get group expenses:", error);
-    return res.status(500).json({ message: "Could not load expenses" });
+    next(error);
   }
 };
 
-// Calculate current net balance for each member.
-// Positive = should receive; negative = owes money.
-exports.getGroupBalances = async (req, res) => {
+exports.getGroupBalances = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
     const group = await getMemberGroup(req.params.groupId, userId);
 
     if (!group) {
-      return res.status(404).json({ message: "Group not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
+      });
     }
 
     const [expenses, settlements] = await Promise.all([
@@ -319,16 +437,22 @@ exports.getGroupBalances = async (req, res) => {
 
     for (const expense of expenses) {
       const payerId = String(expense.paidBy);
+
       balances.set(
         payerId,
-        roundMoney((balances.get(payerId) || 0) + expense.totalAmount)
+        roundMoney(
+          (balances.get(payerId) || 0) + expense.totalAmount
+        )
       );
 
       for (const split of expense.splits) {
         const memberId = String(split.user);
+
         balances.set(
           memberId,
-          roundMoney((balances.get(memberId) || 0) - split.amount)
+          roundMoney(
+            (balances.get(memberId) || 0) - split.amount
+          )
         );
       }
     }
@@ -339,11 +463,16 @@ exports.getGroupBalances = async (req, res) => {
 
       balances.set(
         fromId,
-        roundMoney((balances.get(fromId) || 0) + settlement.amount)
+        roundMoney(
+          (balances.get(fromId) || 0) + settlement.amount
+        )
       );
+
       balances.set(
         toId,
-        roundMoney((balances.get(toId) || 0) - settlement.amount)
+        roundMoney(
+          (balances.get(toId) || 0) - settlement.amount
+        )
       );
     }
 
@@ -353,43 +482,67 @@ exports.getGroupBalances = async (req, res) => {
 
     const result = members.map((member) => ({
       user: member,
-      balance: roundMoney(balances.get(String(member._id)) || 0),
+      balance: roundMoney(
+        balances.get(String(member._id)) || 0
+      ),
     }));
 
-    return res.json({ balances: result });
+    return res.status(200).json({
+      success: true,
+      balances: result,
+    });
   } catch (error) {
-    console.error("Get group balances:", error);
-    return res.status(500).json({ message: "Could not calculate balances" });
+    next(error);
   }
 };
 
-// Record a transfer from the logged-in member to another group member.
-// This records the transfer; it does not initiate a bank/UPI payment.
-exports.createSettlement = async (req, res) => {
+exports.createSettlement = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
     const { groupId, to, amount, note } = req.body;
     const value = Number(amount);
 
-    if (!mongoose.isValidObjectId(groupId) ||
-        !mongoose.isValidObjectId(to)) {
-      return res.status(400).json({ message: "Invalid group or recipient" });
+    if (
+      !mongoose.isValidObjectId(groupId) ||
+      !mongoose.isValidObjectId(to)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid group or recipient.",
+      });
     }
 
-    if (!Number.isFinite(value) || value <= 0) {
-      return res.status(400).json({ message: "Amount must be positive" });
+    if (
+      amount === "" ||
+      amount === null ||
+      !Number.isFinite(value) ||
+      value <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must be positive.",
+      });
     }
 
     if (String(userId) === String(to)) {
       return res.status(400).json({
-        message: "You cannot settle with yourself",
+        success: false,
+        message: "You cannot settle with yourself.",
       });
     }
 
     const group = await getMemberGroup(groupId, userId);
 
-    if (!group || !group.members.some((member) => String(member) === String(to))) {
-      return res.status(404).json({ message: "Group or recipient not found" });
+    if (
+      !group ||
+      !group.members.some((member) => String(member) === String(to))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Group or recipient not found.",
+      });
     }
 
     const settlement = await Settlement.create({
@@ -397,16 +550,18 @@ exports.createSettlement = async (req, res) => {
       from: userId,
       to,
       amount: roundMoney(value),
-      note: note || "",
+      note: typeof note === "string" ? note.trim() : "",
     });
 
     const populated = await Settlement.findById(settlement._id)
       .populate("from", "name email")
       .populate("to", "name email");
 
-    return res.status(201).json({ settlement: populated });
+    return res.status(201).json({
+      success: true,
+      settlement: populated,
+    });
   } catch (error) {
-    console.error("Create settlement:", error);
-    return res.status(500).json({ message: "Could not record settlement" });
+    next(error);
   }
 };

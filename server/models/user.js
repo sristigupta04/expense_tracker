@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
@@ -7,6 +6,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, "Name is required"],
       trim: true,
+      maxlength: 100,
     },
 
     email: {
@@ -22,16 +22,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+      maxlength: 20,
     },
 
     password: {
       type: String,
       required: [true, "Password is required"],
       minlength: 8,
-      select: true,
+      select: false,
     },
 
-    // Password reset fields
     resetPasswordToken: {
       type: String,
       default: null,

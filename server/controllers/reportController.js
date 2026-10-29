@@ -1,34 +1,57 @@
-
+const mongoose = require("mongoose");
 const Transaction = require("../models/Transaction");
 
+function getUserId(req, res) {
+  const userId = req.user?.id || req.user?._id;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required. Please log in again.",
+    });
+
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(userId);
+}
+
 // GET /api/report
-const getDashboardReport = async (req, res) => {
+const getDashboardReport = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
+    const userId = getUserId(req, res);
+    if (!userId) return;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
+    const [result] = await Transaction.aggregate([
+      { $match: { user: userId } },
+      {
+        $group: {
+          _id: null,
+          totalIncome: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "income"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          totalExpense: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "expense"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          transactionCount: { $sum: 1 },
+        },
+      },
+    ]);
 
-    const transactions = await Transaction.find({ user: userId }).lean();
-
-    let totalIncome = 0;
-    let totalExpense = 0;
-
-    for (const transaction of transactions) {
-      const amount = Number(transaction.amount);
-
-      if (!Number.isFinite(amount)) continue;
-
-      if (transaction.type === "income") {
-        totalIncome += amount;
-      } else if (transaction.type === "expense") {
-        totalExpense += amount;
-      }
-    }
+    const totalIncome = result?.totalIncome || 0;
+    const totalExpense = result?.totalExpense || 0;
 
     return res.status(200).json({
       success: true,
@@ -36,123 +59,132 @@ const getDashboardReport = async (req, res) => {
         totalIncome,
         totalExpense,
         balance: totalIncome - totalExpense,
-        transactionCount: transactions.length,
+        transactionCount: result?.transactionCount || 0,
       },
     });
   } catch (error) {
-    console.error("Dashboard report error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to generate dashboard report",
-    });
+    next(error);
   }
 };
 
 // GET /api/report/category
-const getCategoryReport = async (req, res) => {
+const getCategoryReport = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
+    const userId = getUserId(req, res);
+    if (!userId) return;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
-
-    const transactions = await Transaction.find({
-      user: userId,
-      type: "expense",
-    })
-      .select("category amount")
-      .lean();
-
-    const categoryTotals = {};
-
-    for (const transaction of transactions) {
-      const category = transaction.category || "Other";
-      const amount = Number(transaction.amount);
-
-      if (!Number.isFinite(amount)) continue;
-
-      categoryTotals[category] =
-        (categoryTotals[category] || 0) + amount;
-    }
-
-    const categories = Object.entries(categoryTotals).map(
-      ([category, total]) => ({ category, total })
-    );
+    const categories = await Transaction.aggregate([
+      {
+        $match: {
+          user: userId,
+          type: "expense",
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $ifNull: ["$category", "Other"],
+          },
+          total: { $sum: "$amount" },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: "$_id",
+          total: 1,
+          transactionCount: 1,
+        },
+      },
+      { $sort: { total: -1 } },
+    ]);
 
     return res.status(200).json({
       success: true,
       categories,
     });
   } catch (error) {
-    console.error("Category report error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to generate category report",
-    });
+    next(error);
   }
 };
 
 // GET /api/report/monthly
-const getMonthlyReport = async (req, res) => {
+const getMonthlyReport = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
+    const userId = getUserId(req, res);
+    if (!userId) return;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
-
-    const transactions = await Transaction.find({ user: userId })
-      .select("amount type date")
-      .sort({ date: 1 })
-      .lean();
-
-    const monthlyTotals = {};
-
-    for (const transaction of transactions) {
-      const date = new Date(transaction.date);
-
-      if (Number.isNaN(date.getTime())) continue;
-
-      const monthKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
-      ).padStart(2, "0")}`;
-
-      if (!monthlyTotals[monthKey]) {
-        monthlyTotals[monthKey] = {
-          month: monthKey,
-          income: 0,
-          expense: 0,
-        };
-      }
-
-      const amount = Number(transaction.amount);
-
-      if (!Number.isFinite(amount)) continue;
-
-      if (transaction.type === "income") {
-        monthlyTotals[monthKey].income += amount;
-      } else if (transaction.type === "expense") {
-        monthlyTotals[monthKey].expense += amount;
-      }
-    }
+    const monthlyReports = await Transaction.aggregate([
+      {
+        $match: {
+          user: userId,
+          date: { $type: "date" },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$date" },
+            month: { $month: "$date" },
+          },
+          income: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "income"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          expense: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "expense"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          month: {
+            $concat: [
+              { $toString: "$_id.year" },
+              "-",
+              {
+                $cond: [
+                  { $lt: ["$_id.month", 10] },
+                  {
+                    $concat: [
+                      "0",
+                      { $toString: "$_id.month" },
+                    ],
+                  },
+                  { $toString: "$_id.month" },
+                ],
+              },
+            ],
+          },
+          income: 1,
+          expense: 1,
+          balance: { $subtract: ["$income", "$expense"] },
+          transactionCount: 1,
+        },
+      },
+      { $sort: { month: 1 } },
+    ]);
 
     return res.status(200).json({
       success: true,
-      monthlyReports: Object.values(monthlyTotals),
+      monthlyReports,
     });
   } catch (error) {
-    console.error("Monthly report error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to generate monthly report",
-    });
+    next(error);
   }
 };
 
