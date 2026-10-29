@@ -1,9 +1,40 @@
 
 import api from "./api";
 
-// Register a new user through the backend
+const isValidMongoId = (id) =>
+  typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
+
+function saveAuthData(data) {
+  const user = data?.user || data;
+  const token = data?.token;
+
+  // MongoDB ObjectId must be a 24-character hexadecimal string.
+  const userId = user?._id || user?.id;
+
+  if (!token || !isValidMongoId(userId)) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("currentUser");
+
+    throw new Error(
+      "Invalid user ID received. Please check the backend authController."
+    );
+  }
+
+  const normalizedUser = {
+    ...user,
+    id: userId,
+    _id: userId,
+  };
+
+  localStorage.setItem("token", token);
+  localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
+
+  return normalizedUser;
+}
+
+// Register
 export async function register(userData) {
-  const { name, email, password } = userData;
+  const { name, email, password, number } = userData || {};
 
   if (!name?.trim() || !email?.trim() || !password) {
     throw new Error("All fields are required.");
@@ -13,24 +44,13 @@ export async function register(userData) {
     name: name.trim(),
     email: email.trim().toLowerCase(),
     password,
+    ...(number ? { number } : {}),
   });
 
-  const data = response.data;
-
-  // Save a token only if the backend actually returns one.
-  if (data.token) {
-    localStorage.setItem("token", data.token);
-  }
-
-  if (data.user) {
-    localStorage.setItem("currentUser", JSON.stringify(data.user));
-    return data.user;
-  }
-
-  return data;
+  return saveAuthData(response.data || {});
 }
 
-// Login an existing user through the backend
+// Login
 export async function login(email, password) {
   if (!email?.trim() || !password) {
     throw new Error("Email and password are required.");
@@ -41,39 +61,44 @@ export async function login(email, password) {
     password,
   });
 
-  const data = response.data;
-
-  if (data.token) {
-    localStorage.setItem("token", data.token);
-  }
-
-  const user = data.user || data;
-
-  if (user && (user._id || user.id || user.email || user.name)) {
-    localStorage.setItem("currentUser", JSON.stringify(user));
-  }
-
-  return user;
+  return saveAuthData(response.data || {});
 }
 
-// Logout the current user
+// Logout
 export function logout() {
   localStorage.removeItem("token");
   localStorage.removeItem("currentUser");
 }
 
-// Return the current user saved in this browser
+// Current user
 export function getCurrentUser() {
   try {
     const storedUser = localStorage.getItem("currentUser");
-    return storedUser ? JSON.parse(storedUser) : null;
+
+    if (!storedUser) return null;
+
+    const user = JSON.parse(storedUser);
+    const userId = user?._id || user?.id;
+
+    if (!isValidMongoId(userId)) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("currentUser");
+      return null;
+    }
+
+    return {
+      ...user,
+      id: userId,
+      _id: userId,
+    };
   } catch {
+    localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
     return null;
   }
 }
 
-// Check whether a user and token are available
+// Authentication status
 export function isAuthenticated() {
   return Boolean(
     localStorage.getItem("token") && getCurrentUser()

@@ -18,6 +18,25 @@ import {
 
 import { register } from "../services/authService";
 
+const passwordRules = [
+  { label: "At least 12 characters", test: (value) => value.length >= 12 },
+  { label: "One uppercase letter", test: (value) => /[A-Z]/.test(value) },
+  { label: "One lowercase letter", test: (value) => /[a-z]/.test(value) },
+  { label: "One number", test: (value) => /\d/.test(value) },
+  {
+    label: "One special character",
+    test: (value) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value),
+  },
+];
+
+function getErrorMessage(error) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    "Unable to create your account. Please try again."
+  );
+}
+
 export default function Register() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -31,16 +50,10 @@ export default function Register() {
 
   const navigate = useNavigate();
 
-  const passwordChecks = [
-    { label: "At least 12 characters", valid: password.length >= 12 },
-    { label: "One uppercase letter", valid: /[A-Z]/.test(password) },
-    { label: "One lowercase letter", valid: /[a-z]/.test(password) },
-    { label: "One number", valid: /\d/.test(password) },
-    {
-      label: "One special character",
-      valid: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(password),
-    },
-  ];
+  const passwordChecks = passwordRules.map((rule) => ({
+    label: rule.label,
+    valid: rule.test(password),
+  }));
 
   const passwordStrength = passwordChecks.filter(
     (check) => check.valid
@@ -69,9 +82,7 @@ export default function Register() {
     }
 
     if (passwordChecks.some((check) => !check.valid)) {
-      setError(
-        "Please meet all password requirements before continuing."
-      );
+      setError("Please meet all password requirements before continuing.");
       return;
     }
 
@@ -89,17 +100,15 @@ export default function Register() {
         password,
       });
 
-      // Registration may not automatically create a login session.
       navigate("/login", {
         replace: true,
-        state: { registered: true, email: cleanEmail },
+        state: {
+          registered: true,
+          email: cleanEmail,
+        },
       });
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Unable to create your account. Please try again."
-      );
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -108,7 +117,6 @@ export default function Register() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 sm:px-6">
       <div className="w-full max-w-md">
-        {/* Brand */}
         <Link
           to="/"
           aria-label="Expense Tracker home"
@@ -123,7 +131,6 @@ export default function Register() {
           </span>
         </Link>
 
-        {/* Registration card */}
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
           <div className="p-6 sm:p-9">
             <div className="mb-7 text-center">
@@ -141,7 +148,6 @@ export default function Register() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Name */}
               <div>
                 <label
                   htmlFor="register-name"
@@ -174,7 +180,6 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label
                   htmlFor="register-email"
@@ -206,7 +211,6 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label
                   htmlFor="register-password"
@@ -241,13 +245,12 @@ export default function Register() {
                     onClick={() => setShowPassword((value) => !value)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
 
-                {/* Password strength */}
                 {password && (
                   <div className="mt-3">
                     <div className="mb-2 flex gap-1.5">
@@ -288,7 +291,6 @@ export default function Register() {
                 )}
               </div>
 
-              {/* Confirm password */}
               <div>
                 <label
                   htmlFor="register-confirm-password"
@@ -329,7 +331,7 @@ export default function Register() {
                         : "Show confirm password"
                     }
                     aria-pressed={showConfirmPassword}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                   >
                     {showConfirmPassword ? (
                       <EyeOff size={18} />
@@ -360,7 +362,6 @@ export default function Register() {
                 )}
               </div>
 
-              {/* Error */}
               {error && (
                 <div
                   role="alert"
@@ -371,7 +372,6 @@ export default function Register() {
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
@@ -391,7 +391,6 @@ export default function Register() {
               </button>
             </form>
 
-            {/* Login link */}
             <p className="mt-7 text-center text-sm text-slate-600">
               Already have an account?{" "}
               <Link
@@ -403,7 +402,6 @@ export default function Register() {
             </p>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-4 text-xs font-medium text-slate-500">
             <ShieldCheck size={16} className="text-emerald-600" />
             Your finances, organized in one place

@@ -1,298 +1,381 @@
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/Authcontext";
+import FinancialSnapshot from "../components/FinancialSnapshot/FinancialSnapshot";
+import WelcomeHeader from "../components/Dashboard/WelcomeHeader.jsx";
+import SummaryCards from "../components/Dashboard/SummaryCards.jsx";
+import RecentTransactions from "../components/Dashboard/RecentTransactions.jsx";
+import QuickActions from "../components/Dashboard/QuickActions.jsx";
+import SpendingOverview from "../components/Dashboard/SpendingOverview.jsx";
 
-import Navbar from "../components/Navbar";
-import SummaryCard from "../components/SummaryCard";
-import TransactionForm from "../components/TransactionForm";
-import TransactionTable from "../components/TransactionTable";
+import CategoryChart from "../components/Charts/categorychart.jsx";
+import DailyChart from "../components/Charts/dailychart.jsx";
+import ExpenseChart from "../components/Charts/ExpenseChart.jsx";
+import IncomeChart from "../components/Charts/Incomechart.jsx";
+import MonthlyChart from "../components/Charts/MonthlyChart.jsx";
 
-import CategoryChart from "../components/charts/categorychart";
-import IncomeChart from "../components/charts/IncomeChart";
-import ExpenseChart from "../components/charts/ExpenseChart";
-import MonthlyChart from "../components/charts/MonthlyChart";
-
-import Loader from "../components/Loader";
-
-import calculateBalance from "../utils/calculateBalance";
-import { useExpense } from "../context/ExpenseContext";
+import useExpense from "../hooks/useExpense";
+import TransactionForm from "../components/Transactions/TransactionForm.jsx";
+import Loader from "../components/common/Loader.jsx";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
   const {
     transactions = [],
     loading,
+    error,
     addExpense,
-    removeExpense,
     editExpense,
   } = useExpense();
 
-  const [selectedTransaction, setSelectedTransaction] =
-    useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [initialTransactionType, setInitialTransactionType] =
+    useState("expense");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
 
-  // Calculate financial summary
-  const { income, expense, balance } =
-    calculateBalance(transactions);
+  // Calculate income, expenses and balance.
+  const financialSummary = useMemo(() => {
+    return transactions.reduce(
+      (summary, transaction) => {
+        const amount = Number(transaction.amount) || 0;
+        const type = String(transaction.type || "").toLowerCase();
 
-  // Get the five most recent transactions.
-  // This creates a copy so the original context array is not modified.
+        if (type === "income") {
+          summary.income += amount;
+        } else if (type === "expense") {
+          summary.expense += amount;
+        }
+
+        return summary;
+      },
+      { income: 0, expense: 0 }
+    );
+  }, [transactions]);
+
+  const balance = financialSummary.income - financialSummary.expense;
+
   const recentTransactions = useMemo(() => {
     return [...transactions]
       .sort((a, b) => {
-        const dateA = new Date(
-          a.date || a.createdAt || 0
-        ).getTime();
-
-        const dateB = new Date(
-          b.date || b.createdAt || 0
-        ).getTime();
-
+        const dateA = new Date(a.date || a.createdAt || 0).getTime();
+        const dateB = new Date(b.date || b.createdAt || 0).getTime();
         return dateB - dateA;
       })
       .slice(0, 5);
   }, [transactions]);
 
-  const handleEditTransaction = (transaction) => {
-    setSelectedTransaction(transaction);
+  const userName =
+    user?.name ||
+    user?.fullName ||
+    user?.username ||
+    user?.email?.split("@")[0] ||
+    "there";
 
-    // Scroll to the transaction form when editing.
-    document
-      .getElementById("transaction-form")
-      ?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+  // Open the transaction form.
+  const openTransactionForm = (type = "expense") => {
+    setSelectedTransaction(null);
+    setInitialTransactionType(type);
+    setFormError("");
+    setFormOpen(true);
   };
 
-  const handleClearSelection = () => {
+  // Open the form to edit a transaction.
+  const openEditForm = (transaction) => {
+    setSelectedTransaction(transaction);
+    setInitialTransactionType(
+      String(transaction.type || "expense").toLowerCase()
+    );
+    setFormError("");
+    setFormOpen(true);
+  };
+
+  const closeTransactionForm = () => {
+    if (saving) return;
+
+    setFormOpen(false);
     setSelectedTransaction(null);
+    setFormError("");
+  };
+
+  // Add or update a transaction.
+  const handleSubmitTransaction = async (formData) => {
+    setSaving(true);
+    setFormError("");
+
+    try {
+      if (selectedTransaction) {
+        const id = selectedTransaction._id || selectedTransaction.id;
+
+        if (!id) {
+          throw new Error("Transaction ID is missing.");
+        }
+
+        await editExpense(id, formData);
+      } else {
+        await addExpense(formData);
+      }
+
+      setFormOpen(false);
+      setSelectedTransaction(null);
+      setFormError("");
+    } catch (err) {
+      setFormError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Unable to save transaction. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Download transactions as a CSV file.
+  const handleExport = () => {
+    setExportMessage("");
+
+    if (loading) {
+      setExportMessage("Please wait. Transactions are loading.");
+      return;
+    }
+
+    if (error) {
+      setExportMessage(
+        "Transactions could not be loaded. Please fix the login/session issue first."
+      );
+      return;
+    }
+
+    if (!transactions.length) {
+      setExportMessage(
+        "There are no transactions to export yet. Add a transaction first."
+      );
+      return;
+    }
+
+    const headers = [
+      "Title",
+      "Type",
+      "Category",
+      "Amount",
+      "Date",
+      "Note",
+    ];
+
+    const escapeCSV = (value) =>
+      `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+    const rows = transactions.map((transaction) => [
+      transaction.title,
+      transaction.type,
+      transaction.category,
+      transaction.amount,
+      transaction.date
+        ? new Date(transaction.date).toLocaleDateString("en-IN")
+        : transaction.createdAt
+          ? new Date(transaction.createdAt).toLocaleDateString("en-IN")
+          : "",
+      transaction.note,
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCSV).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `expense-transactions-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    // Revoke after the browser has had time to start the download.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    setExportMessage("Your CSV export has been started.");
   };
 
   return (
-    <>
-      <Navbar />
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      {loading && <Loader />}
 
-      <main className="min-h-screen bg-slate-50 text-slate-900">
-        {/* Loading overlay/component */}
-        {loading && <Loader />}
+      <div className="mx-auto max-w-[1440px] space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <WelcomeHeader
+          userName={userName}
+          onAddTransaction={() => openTransactionForm("expense")}
+          onExport={handleExport}
+        />
 
-        <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {/* Dashboard Header */}
-          <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
-                Personal Finance
-              </p>
-
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                Dashboard
-              </h1>
-
-              <p className="mt-2 text-sm text-slate-500 sm:text-base">
-                Track your money, understand your spending,
-                and stay in control of your finances.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 self-start rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:self-auto">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-xl">
-                💰
-              </div>
-
-              <div>
-                <p className="text-xs text-slate-500">
-                  Total transactions
-                </p>
-
-                <p className="text-lg font-bold text-slate-900">
-                  {transactions.length}
-                </p>
-              </div>
-            </div>
-          </header>
-
-          {/* Financial Summary */}
-          <section
-            aria-label="Financial summary"
-            className="mb-8"
+        {error && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
-            <SummaryCard
-              balance={balance}
-              income={income}
-              expense={expense}
-            />
-          </section>
+            {typeof error === "string"
+              ? error
+              : error?.message || "Unable to load transactions."}
 
-          {/* Transaction Form and Recent Transactions */}
-          <section className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-5">
-            {/* Add/Edit Transaction Form */}
-            <div
-              id="transaction-form"
-              className="min-w-0 scroll-mt-24 xl:col-span-2"
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="ml-2 font-semibold underline"
             >
-              <div className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-6 flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900 sm:text-xl">
-                      {selectedTransaction
-                        ? "Edit Transaction"
-                        : "Add Transaction"}
-                    </h2>
+              Go to login
+            </button>
+          </div>
+        )}
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      {selectedTransaction
-                        ? "Update your transaction details."
-                        : "Record your income or expenses."}
-                    </p>
-                  </div>
+        {exportMessage && (
+          <div
+            role="status"
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+          >
+            {exportMessage}
+          </div>
+        )}
+<FinancialSnapshot />
+        <SummaryCards
+          transactions={transactions}
+          balance={balance}
+          income={financialSummary.income}
+          expense={financialSummary.expense}
+          loading={loading}
+        />
 
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xl">
-                    {selectedTransaction ? "✏️" : "＋"}
-                  </div>
-                </div>
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="min-w-0 xl:col-span-2">
+            <RecentTransactions
+              transactions={recentTransactions}
+              loading={loading}
+              limit={5}
+              onViewAll={() => navigate("/transactions")}
+              onEdit={openEditForm}
+            />
+          </div>
 
-                <TransactionForm
-                  addTransaction={addExpense}
-                  editTransaction={editExpense}
-                  selectedTransaction={selectedTransaction}
-                  clearSelection={handleClearSelection}
-                />
-              </div>
-            </div>
+          <div className="min-w-0">
+            <QuickActions
+              onAddTransaction={(options) =>
+                openTransactionForm(options?.type || "expense")
+              }
+              onAddIncome={() => openTransactionForm("income")}
+              onAddExpense={() => openTransactionForm("expense")}
+            />
+          </div>
+        </section>
 
-            {/* Recent Transactions */}
-            <div className="min-w-0 xl:col-span-3">
-              <div className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900 sm:text-xl">
-                      Recent Transactions
-                    </h2>
+        <SpendingOverview
+          transactions={transactions}
+          budgets={[]}
+          loading={loading}
+          onViewBudgets={() => navigate("/budgets")}
+        />
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      Your latest financial activity.
-                    </p>
-                  </div>
+        <section aria-label="Financial analytics">
+          <div className="mb-5">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Financial Analytics
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Understand your income, expenses and spending patterns.
+            </p>
+          </div>
 
-                  <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {recentTransactions.length} recent
-                  </span>
-                </div>
-
-                {transactions.length > 0 ? (
-                  <TransactionTable
-                    transactions={recentTransactions}
-                    deleteTransaction={removeExpense}
-                    editTransaction={handleEditTransaction}
-                  />
-                ) : (
-                  <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
-                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl">
-                      🧾
-                    </div>
-
-                    <h3 className="font-semibold text-slate-800">
-                      No transactions yet
-                    </h3>
-
-                    <p className="mt-2 max-w-xs text-sm text-slate-500">
-                      Add your first income or expense using
-                      the form to see it here.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Financial Analytics */}
-          <section aria-label="Financial analytics">
-            <div className="mb-5">
-              <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
-                Financial Analytics
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Understand where your money comes from
-                and where it goes.
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="mb-1 font-bold text-slate-900">
+                Category Distribution
+              </h3>
+              <p className="mb-5 text-sm text-slate-500">
+                See which categories account for your spending.
               </p>
+              <CategoryChart transactions={transactions} />
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Category Distribution */}
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-5">
-                  <h3 className="font-bold text-slate-900">
-                    Category Distribution
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Explore your spending by category.
-                  </p>
-                </div>
-
-                <CategoryChart
-                  transactions={transactions}
-                />
-              </div>
-
-              {/* Expense Analysis */}
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-5">
-                  <h3 className="font-bold text-slate-900">
-                    Expense Analysis
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Review your outgoing money.
-                  </p>
-                </div>
-
-                <ExpenseChart
-                  transactions={transactions}
-                />
-              </div>
-
-              {/* Income Analysis */}
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-5">
-                  <h3 className="font-bold text-slate-900">
-                    Income Analysis
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Understand your income sources.
-                  </p>
-                </div>
-
-                <IncomeChart
-                  transactions={transactions}
-                />
-              </div>
-
-              {/* Monthly Overview */}
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-6">
-                <div className="mb-5">
-                  <h3 className="font-bold text-slate-900">
-                    Monthly Overview
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Compare your financial activity over time.
-                  </p>
-                </div>
-
-                <MonthlyChart
-                  transactions={transactions}
-                />
-              </div>
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="mb-1 font-bold text-slate-900">
+                Daily Activity
+              </h3>
+              <p className="mb-5 text-sm text-slate-500">
+                Compare your daily income and expenses.
+              </p>
+              <DailyChart transactions={transactions} />
             </div>
-          </section>
 
-          {/* Footer */}
-          <footer className="mt-10 border-t border-slate-200 py-5 text-center text-xs text-slate-500">
-            Manage your money with clarity and confidence.
-          </footer>
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="mb-1 font-bold text-slate-900">
+                Expense Analysis
+              </h3>
+              <p className="mb-5 text-sm text-slate-500">
+                Review your outgoing money over time.
+              </p>
+              <ExpenseChart transactions={transactions} />
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="mb-1 font-bold text-slate-900">
+                Income Analysis
+              </h3>
+              <p className="mb-5 text-sm text-slate-500">
+                Track your incoming money over time.
+              </p>
+              <IncomeChart transactions={transactions} />
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:col-span-2">
+              <h3 className="mb-1 font-bold text-slate-900">
+                Monthly Overview
+              </h3>
+              <p className="mb-5 text-sm text-slate-500">
+                Compare income and expenses across months.
+              </p>
+              <MonthlyChart transactions={transactions} />
+            </div>
+          </div>
+        </section>
+
+        <footer className="border-t border-slate-200 py-5 text-center text-xs text-slate-500">
+          Manage your money with clarity and confidence.
+        </footer>
+      </div>
+
+      <TransactionForm
+        open={formOpen}
+        transaction={
+          selectedTransaction
+            ? {
+                ...selectedTransaction,
+                type: initialTransactionType,
+              }
+            : { type: initialTransactionType }
+        }
+        onSubmit={handleSubmitTransaction}
+        onClose={closeTransactionForm}
+        loading={saving}
+      />
+
+      {formError && formOpen && (
+        <div
+          role="alert"
+          className="fixed bottom-20 right-4 z-50 max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-700 shadow-lg"
+        >
+          {formError}
         </div>
-      </main>
-    </>
+      )}
+    </main>
   );
 }

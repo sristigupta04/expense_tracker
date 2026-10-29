@@ -2,21 +2,21 @@
 import api from "./api";
 
 // Get all transactions
-export const getTransactions = async () => {
-  const { data } = await api.get("/transactions");
+export const getTransactions = async (params = {}) => {
+  const { data } = await api.get("/transactions", { params });
   return data;
 };
 
-// Add a new transaction
+// Add a transaction
 export const addTransaction = async (transaction) => {
   const { data } = await api.post("/transactions", transaction);
   return data;
 };
 
-// Update an existing transaction
+// Update a transaction
 export const updateTransaction = async (id, transaction) => {
   if (!id) {
-    throw new Error("Transaction ID is required to update a transaction.");
+    throw new Error("Transaction ID is required.");
   }
 
   const { data } = await api.put(`/transactions/${id}`, transaction);
@@ -26,9 +26,19 @@ export const updateTransaction = async (id, transaction) => {
 // Delete a transaction
 export const deleteTransaction = async (id) => {
   if (!id) {
-    throw new Error("Transaction ID is required to delete a transaction.");
+    throw new Error("Transaction ID is required.");
   }
 
   const { data } = await api.delete(`/transactions/${id}`);
   return data;
 };
+
+// Default export for useExpense.js compatibility
+const transactionApi = {
+  getAll: getTransactions,
+  create: addTransaction,
+  update: updateTransaction,
+  remove: deleteTransaction,
+};
+
+export default transactionApi;

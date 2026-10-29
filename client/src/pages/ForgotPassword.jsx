@@ -1,0 +1,267 @@
+
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Wallet,
+  Mail,
+  ArrowLeft,
+  ArrowRight,
+  LoaderCircle,
+  ShieldCheck,
+  CircleCheck,
+  AlertCircle,
+  KeyRound,
+  RefreshCw,
+} from "lucide-react";
+import api from "../services/api";
+
+export default function ForgotPassword() {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess(false);
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await api.post("/auth/forgot-password", {
+        email: cleanEmail,
+      });
+
+      setSuccess(true);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          "Unable to send the reset link. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F4F7FF] px-4 py-8 sm:px-6 lg:px-8">
+      {/* Soft background decoration */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-28 -top-28 h-80 w-80 rounded-full bg-blue-200/40 blur-3xl"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl"
+      />
+
+      <div className="relative z-10 w-full max-w-[440px]">
+        {/* Brand */}
+        <Link
+          to="/"
+          aria-label="Expense Tracker home"
+          className="mb-8 flex items-center justify-center gap-3"
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0D21A1] text-white shadow-lg shadow-blue-900/20">
+            <Wallet size={25} strokeWidth={2.2} />
+          </div>
+
+          <span className="text-2xl font-extrabold tracking-tight text-[#111827]">
+            Expense<span className="text-[#2563EB]">Tracker</span>
+          </span>
+        </Link>
+
+        {/* Main card */}
+        <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_80px_-30px_rgba(30,64,175,0.22)]">
+          <div className="p-6 sm:p-9">
+            {/* Icon */}
+            <div className="mb-6 flex justify-center">
+              <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#EEF4FF] text-[#0D21A1]">
+                {success ? (
+                  <CircleCheck size={34} strokeWidth={1.8} />
+                ) : (
+                  <KeyRound size={32} strokeWidth={1.8} />
+                )}
+
+                {!success && (
+                  <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white">
+                    <Mail size={12} />
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Heading */}
+            <div className="mb-8 text-center">
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#2563EB]">
+                Account recovery
+              </p>
+
+              <h1 className="text-[28px] font-extrabold tracking-tight text-[#111827] sm:text-[32px]">
+                {success ? "Check your email" : "Forgot password?"}
+              </h1>
+
+              <p className="mx-auto mt-3 max-w-[320px] text-sm leading-6 text-slate-500">
+                {success
+                  ? "If an account matches that email, password reset instructions will be sent to your inbox."
+                  : "No worries! Enter the email address associated with your account and we'll help you reset your password."}
+              </p>
+            </div>
+
+            {/* Success state */}
+            {success ? (
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <CircleCheck
+                      size={20}
+                      className="mt-0.5 shrink-0 text-emerald-600"
+                    />
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-emerald-800">
+                        Reset request submitted
+                      </p>
+
+                      <p className="mt-1 break-words text-sm leading-5 text-emerald-700">
+                        Email entered: {email.trim()}
+                      </p>
+
+                      <p className="mt-2 text-xs leading-5 text-emerald-700">
+                        Check your inbox and spam folder. The reset link must
+                        be generated by the server and sent by email.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSuccess(false);
+                    setError("");
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+                >
+                  <RefreshCw size={17} />
+                  Try another email
+                </button>
+
+                <Link
+                  to="/login"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E]"
+                >
+                  Back to sign in
+                  <ArrowRight size={18} />
+                </Link>
+              </div>
+            ) : (
+              /* Reset request form */
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label
+                    htmlFor="forgot-email"
+                    className="mb-2 block text-sm font-semibold text-slate-700"
+                  >
+                    Email address
+                  </label>
+
+                  <div className="group relative">
+                    <Mail
+                      size={19}
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-blue-600"
+                    />
+
+                    <input
+                      id="forgot-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) => {
+                        setEmail(event.target.value);
+                        setError("");
+                      }}
+                      required
+                      disabled={loading}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-3.5 text-sm text-red-700"
+                  >
+                    <AlertCircle
+                      size={19}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <p className="leading-5">{error}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="group flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E] hover:shadow-xl active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <>
+                      <LoaderCircle size={19} className="animate-spin" />
+                      Sending request...
+                    </>
+                  ) : (
+                    <>
+                      Send reset link
+                      <ArrowRight
+                        size={18}
+                        className="transition-transform group-hover:translate-x-1"
+                      />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* Back link */}
+            {!success && (
+              <div className="mt-7 text-center">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1]"
+                >
+                  <ArrowLeft size={17} />
+                  Back to sign in
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Security footer */}
+          <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-[#FAFBFF] px-4 py-4 text-center text-xs font-medium leading-5 text-slate-500 sm:px-6">
+            <ShieldCheck
+              size={17}
+              className="shrink-0 text-emerald-600"
+            />
+            Your account security matters to us.
+          </div>
+        </section>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Track smarter. Spend better.
+        </p>
+      </div>
+    </main>
+  );
+}
