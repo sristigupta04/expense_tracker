@@ -1,7 +1,13 @@
-
 const validate = (schema) => {
   return (req, res, next) => {
     try {
+      if (!schema || typeof schema.validate !== "function") {
+        return res.status(500).json({
+          success: false,
+          message: "Invalid validation schema configuration",
+        });
+      }
+
       const result = schema.validate(req.body, {
         abortEarly: false,
         stripUnknown: true,
@@ -18,9 +24,9 @@ const validate = (schema) => {
       }
 
       req.body = result.value;
-      next();
+      return next();
     } catch (error) {
-      next(error);
+      return next(error);
     }
   };
 };

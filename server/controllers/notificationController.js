@@ -1,9 +1,8 @@
-
 const mongoose = require("mongoose");
 const Notification = require("../models/notification");
 
 // GET /api/notifications
-const getNotifications = async (req, res) => {
+const getNotifications = async (req, res, next) => {
   try {
     const userId = req.user?.id;
 
@@ -24,16 +23,12 @@ const getNotifications = async (req, res) => {
       notifications,
     });
   } catch (error) {
-    console.error("Get notifications error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch notifications",
-    });
+    next(error);
   }
 };
 
 // GET /api/notifications/unread-count
-const getUnreadCount = async (req, res) => {
+const getUnreadCount = async (req, res, next) => {
   try {
     const userId = req.user?.id;
 
@@ -54,16 +49,12 @@ const getUnreadCount = async (req, res) => {
       count,
     });
   } catch (error) {
-    console.error("Unread count error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch unread notification count",
-    });
+    next(error);
   }
 };
 
 // PATCH /api/notifications/:id/read
-const markNotificationRead = async (req, res) => {
+const markNotificationRead = async (req, res, next) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
@@ -101,16 +92,12 @@ const markNotificationRead = async (req, res) => {
       notification,
     });
   } catch (error) {
-    console.error("Mark notification read error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update notification",
-    });
+    next(error);
   }
 };
 
 // PATCH /api/notifications/read-all
-const markAllNotificationsRead = async (req, res) => {
+const markAllNotificationsRead = async (req, res, next) => {
   try {
     const userId = req.user?.id;
 
@@ -132,16 +119,12 @@ const markAllNotificationsRead = async (req, res) => {
       updatedCount: result.modifiedCount,
     });
   } catch (error) {
-    console.error("Mark all notifications read error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update notifications",
-    });
+    next(error);
   }
 };
 
 // DELETE /api/notifications/:id
-const deleteNotification = async (req, res) => {
+const deleteNotification = async (req, res, next) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
@@ -177,11 +160,7 @@ const deleteNotification = async (req, res) => {
       message: "Notification deleted successfully",
     });
   } catch (error) {
-    console.error("Delete notification error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete notification",
-    });
+    next(error);
   }
 };
 

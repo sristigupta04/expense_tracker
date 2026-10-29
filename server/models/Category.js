@@ -2,21 +2,29 @@ const mongoose = require("mongoose");
 
 const categorySchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
-
+    type: {
+      type: String,
+      enum: ["income", "expense", "both"],
+      default: "expense",
+    },
     color: {
       type: String,
-      required: true,
+      default: "#2563EB",
     },
-
     icon: {
       type: String,
-      required: true,
+      default: "wallet",
     },
   },
   {
@@ -24,7 +32,10 @@ const categorySchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "Category",
-  categorySchema
+categorySchema.index(
+  { user: 1, name: 1, type: 1 },
+  { unique: true }
 );
+
+module.exports =
+  mongoose.models.Category || mongoose.model("Category", categorySchema);

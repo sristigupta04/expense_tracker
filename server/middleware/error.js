@@ -1,4 +1,3 @@
-
 const errorHandler = (err, req, res, next) => {
   console.error("Error:", err.message);
 
@@ -41,3 +40,4 @@ const errorHandler = (err, req, res, next) => {
 };
 
 module.exports = errorHandler;
+4

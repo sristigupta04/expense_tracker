@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const savingSchema = new mongoose.Schema(
@@ -7,6 +6,7 @@ const savingSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
 
     target: {
@@ -19,6 +19,12 @@ const savingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+      validate: {
+        validator(value) {
+          return value <= this.target;
+        },
+        message: "Saved amount cannot exceed the target.",
+      },
     },
 
     deadline: {
@@ -30,6 +36,7 @@ const savingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
   },
   {
@@ -39,4 +46,5 @@ const savingSchema = new mongoose.Schema(
 
 savingSchema.index({ user: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Saving", savingSchema);
+module.exports =
+  mongoose.models.Saving || mongoose.model("Saving", savingSchema);
