@@ -1,29 +1,47 @@
+
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
+      required: [true, "Name is required"],
       trim: true,
     },
 
     email: {
       type: String,
-      required: true,
+      required: [true, "Email is required"],
       unique: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
 
     number: {
       type: String,
       default: "",
+      trim: true,
     },
 
     password: {
       type: String,
-      required: true,
+      required: [true, "Password is required"],
+      minlength: 8,
+      select: true,
+    },
+
+    // Password reset fields
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+      select: false,
     },
   },
   {
@@ -31,4 +49,5 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("User", userSchema);
+module.exports =
+  mongoose.models.User || mongoose.model("User", userSchema);

@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 
 const express = require("express");
@@ -10,28 +11,17 @@ const transactionRoutes = require("./routes/transactionRoute");
 const categoryRoutes = require("./routes/categoryRoute");
 const budgetRoutes = require("./routes/budgetRoute");
 const reportRoutes = require("./routes/reportRoute");
+const notificationRoutes = require("./routes/notificationRoute");
+const recurringTransactionRoutes = require("./routes/recurringTransactionRoute");
+const sharedExpenseRoutes = require("./routes/sharedExpenseRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ======================
-// Database Connection
-// ======================
-mongoose
-  .connect(process.env.MONGO_URL)
-  .then(() => {
-    console.log("✅ MongoDB Connected");
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB Error:", err.message);
-  });
-
-// ======================
 // Middleware
-// ======================
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "*",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
   })
 );
@@ -39,9 +29,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ======================
-// Routes
-// ======================
+// Health check
 app.get("/", (req, res) => {
   res.json({
     success: true,
@@ -49,20 +37,17 @@ app.get("/", (req, res) => {
   });
 });
 
+// API routes
 app.use("/api/auth", authRoutes);
-
 app.use("/api/transactions", transactionRoutes);
-
 app.use("/api/categories", categoryRoutes);
-
 app.use("/api/budget", budgetRoutes);
-
-// IMPORTANT
 app.use("/api/report", reportRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/recurring-transactions", recurringTransactionRoutes);
+app.use("/api/shared-expenses", sharedExpenseRoutes);
 
-// ======================
-// 404
-// ======================
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -70,19 +55,43 @@ app.use((req, res) => {
   });
 });
 
-// ======================
-// Error Handler
-// ======================
+// Central error handler
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error("API Error:", err.message);
 
-  res.status(500).json({
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const status = err.status || err.statusCode || 500;
+
+  res.status(status).json({
     success: false,
-    message: err.message,
+    message:
+      status < 500
+        ? err.message
+        : "Internal server error.",
   });
 });
 
-// ======================
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+// Start server after database connection
+async function startServer() {
+  try {
+    if (!process.env.MONGO_URL) {
+      throw new Error("MONGO_URL is missing in server .env");
+    }
+
+    await mongoose.connect(process.env.MONGO_URL);
+
+    console.log("MongoDB Connected");
+
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
+  }
+}
+
+startServer();
