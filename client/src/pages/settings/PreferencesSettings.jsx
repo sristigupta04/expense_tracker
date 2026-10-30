@@ -56,8 +56,10 @@ function readPreferences() {
     return {
       ...defaults,
       ...(saved.preferences || {}),
-      // Backward compatibility with settings saved by earlier versions.
-      currency: saved.preferences?.currency || saved.currency || defaults.currency,
+      currency:
+        saved.preferences?.currency ||
+        saved.currency ||
+        defaults.currency,
       dateFormat:
         saved.preferences?.dateFormat ||
         saved.dateFormat ||
@@ -84,7 +86,9 @@ function PreferenceRow({ icon: Icon, title, description, children }) {
         </div>
       </div>
 
-      <div className="w-full sm:w-64 sm:shrink-0">{children}</div>
+      <div className="w-full sm:w-64 sm:shrink-0">
+        {children}
+      </div>
     </div>
   );
 }
@@ -114,6 +118,7 @@ function SelectField({ label, value, onChange, children }) {
   return (
     <label className="block">
       <span className="sr-only">{label}</span>
+
       <select
         aria-label={label}
         value={value}
@@ -126,6 +131,60 @@ function SelectField({ label, value, onChange, children }) {
   );
 }
 
+function formatPreviewAmount(preferences) {
+  try {
+    const formatter = new Intl.NumberFormat(
+      preferences.numberFormat,
+      {
+        style: preferences.compactNumbers ? "decimal" : "currency",
+        ...(preferences.compactNumbers
+          ? {
+              notation: "compact",
+              maximumFractionDigits: 1,
+            }
+          : {
+              currency: preferences.currency,
+              minimumFractionDigits: preferences.showDecimals ? 2 : 0,
+              maximumFractionDigits: preferences.showDecimals ? 2 : 0,
+            }),
+      }
+    );
+
+    const result = formatter.format(123456.78);
+
+    if (preferences.compactNumbers) {
+      const currency =
+        currencyOptions.find(
+          (item) => item.value === preferences.currency
+        ) || currencyOptions[0];
+
+      return `${currency.symbol}${result}`;
+    }
+
+    return result;
+  } catch {
+    return "₹1,23,456.78";
+  }
+}
+
+function formatPreviewDate(format) {
+  const date = new Date(2026, 9, 29);
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  if (format === "YYYY-MM-DD") {
+    return `${year}-${month}-${day}`;
+  }
+
+  if (format === "MM/DD/YYYY") {
+    return `${month}/${day}/${year}`;
+  }
+
+  return `${day}/${month}/${year}`;
+}
+
 export default function PreferencesSettings() {
   const navigate = useNavigate();
 
@@ -134,7 +193,8 @@ export default function PreferencesSettings() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("success");
 
-  const dirty = JSON.stringify(preferences) !== JSON.stringify(original);
+  const dirty =
+    JSON.stringify(preferences) !== JSON.stringify(original);
 
   useEffect(() => {
     document.documentElement.lang = preferences.numberFormat;
@@ -145,6 +205,7 @@ export default function PreferencesSettings() {
       ...current,
       [key]: value,
     }));
+
     setMessage("");
   }
 
@@ -160,12 +221,17 @@ export default function PreferencesSettings() {
         ...existing,
         currency: preferences.currency,
         dateFormat: preferences.dateFormat,
-        preferences,
+        preferences: {
+          ...preferences,
+        },
       };
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(combined)
+      );
 
-      setOriginal(preferences);
+      setOriginal({ ...preferences });
       setMessage("Your preferences have been saved.");
       setMessageType("success");
     } catch {
@@ -179,33 +245,18 @@ export default function PreferencesSettings() {
     setMessage("");
   }
 
+  function discardChanges() {
+    setPreferences({ ...original });
+    setMessage("");
+  }
+
   const currency =
-    currencyOptions.find((item) => item.value === preferences.currency) ||
-    currencyOptions[0];
+    currencyOptions.find(
+      (item) => item.value === preferences.currency
+    ) || currencyOptions[0];
 
-  const exampleAmount = new Intl.NumberFormat(
-    preferences.numberFormat,
-    {
-      style: "currency",
-      currency: preferences.currency,
-      minimumFractionDigits: preferences.showDecimals ? 2 : 0,
-      maximumFractionDigits: preferences.showDecimals ? 2 : 0,
-    }
-  ).format(123456.78);
-
-  const exampleDate = (() => {
-    const date = new Date(2026, 9, 29);
-
-    if (preferences.dateFormat === "YYYY-MM-DD") {
-      return "2026-10-29";
-    }
-
-    if (preferences.dateFormat === "MM/DD/YYYY") {
-      return "10/29/2026";
-    }
-
-    return "29/10/2026";
-  })();
+  const exampleAmount = formatPreviewAmount(preferences);
+  const exampleDate = formatPreviewDate(preferences.dateFormat);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 sm:py-8 lg:px-8">
@@ -249,6 +300,7 @@ export default function PreferencesSettings() {
             ) : (
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             )}
+
             <span>{message}</span>
           </div>
         )}
@@ -256,7 +308,10 @@ export default function PreferencesSettings() {
         <form onSubmit={savePreferences}>
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 shadow-sm sm:px-7">
             <div className="border-b border-slate-100 py-5">
-              <h2 className="text-lg font-bold">Regional preferences</h2>
+              <h2 className="text-lg font-bold">
+                Regional preferences
+              </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Choose how financial information is formatted.
               </p>
@@ -335,7 +390,10 @@ export default function PreferencesSettings() {
 
           <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 shadow-sm sm:px-7">
             <div className="border-b border-slate-100 py-5">
-              <h2 className="text-lg font-bold">Display options</h2>
+              <h2 className="text-lg font-bold">
+                Display options
+              </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Adjust how financial amounts are presented.
               </p>
@@ -369,7 +427,9 @@ export default function PreferencesSettings() {
           <section className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
             <div className="flex items-center gap-2">
               <Eye size={19} className="text-blue-800" />
-              <h2 className="font-bold text-slate-800">Live preview</h2>
+              <h2 className="font-bold text-slate-800">
+                Live preview
+              </h2>
             </div>
 
             <p className="mt-1 text-sm text-slate-500">
@@ -381,13 +441,9 @@ export default function PreferencesSettings() {
                 <p className="text-xs font-medium text-slate-500">
                   Example amount
                 </p>
+
                 <p className="mt-2 break-words text-2xl font-bold text-[#0D21A1]">
-                  {preferences.compactNumbers
-                    ? new Intl.NumberFormat(preferences.numberFormat, {
-                        notation: "compact",
-                        maximumFractionDigits: 1,
-                      }).format(123456.78) + ` ${currency.symbol}`
-                    : exampleAmount}
+                  {exampleAmount}
                 </p>
               </div>
 
@@ -395,6 +451,7 @@ export default function PreferencesSettings() {
                 <p className="text-xs font-medium text-slate-500">
                   Example date
                 </p>
+
                 <p className="mt-2 text-xl font-bold text-slate-800">
                   {exampleDate}
                 </p>
@@ -409,15 +466,28 @@ export default function PreferencesSettings() {
           </section>
 
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-            <button
-              type="button"
-              onClick={resetPreferences}
-              disabled={!dirty}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw size={16} />
-              Reset changes
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={resetPreferences}
+                disabled={
+                  JSON.stringify(preferences) === JSON.stringify(defaults)
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw size={16} />
+                Reset to default
+              </button>
+
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={!dirty}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Discard changes
+              </button>
+            </div>
 
             <button
               type="submit"

@@ -1,6 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
 import transactionApi from "../services/transactionApi";
 
+function normalizeTransactions(result) {
+  if (Array.isArray(result)) return result;
+  if (Array.isArray(result?.transactions)) return result.transactions;
+  if (Array.isArray(result?.data?.transactions)) {
+    return result.data.transactions;
+  }
+  if (Array.isArray(result?.data)) return result.data;
+
+  return [];
+}
+
+function getErrorMessage(error, fallback) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+}
+
+function getTransactionId(transaction) {
+  return transaction?._id ?? transaction?.id ?? null;
+}
+
 export default function useExpense({ autoFetch = true } = {}) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -13,25 +36,17 @@ export default function useExpense({ autoFetch = true } = {}) {
 
     try {
       const result = await transactionApi.getAll(params);
-
-      const list =
-        result?.transactions ??
-        result?.data?.transactions ??
-        result?.data ??
-        result;
-
-      if (!Array.isArray(list)) {
-        throw new Error("Invalid transactions response.");
-      }
+      const list = normalizeTransactions(result);
 
       setTransactions(list);
       return list;
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to load transactions."
+      const message = getErrorMessage(
+        err,
+        "Failed to load transactions."
       );
+
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -39,52 +54,80 @@ export default function useExpense({ autoFetch = true } = {}) {
   }, []);
 
   // Add transaction
-  const createTransaction = useCallback(async (transactionData) => {
-    setLoading(true);
-    setError("");
+  const createTransaction = useCallback(
+    async (transactionData) => {
+      setError("");
 
-    try {
-      const result = await transactionApi.create(transactionData);
-      await fetchTransactions();
+      try {
+        const result = await transactionApi.create(transactionData);
+        const created = result?.transaction ?? result?.data ?? result;
 
-      return result;
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to create transaction."
-      );
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchTransactions]);
+        if (!getTransactionId(created)) {
+          await fetchTransactions();
+        } else {
+          setTransactions((previous) => [
+            created,
+            ...previous.filter(
+              (item) =>
+                String(getTransactionId(item)) !==
+                String(getTransactionId(created))
+            ),
+          ]);
+        }
+
+        return created;
+      } catch (err) {
+        setError(
+          getErrorMessage(err, "Failed to create transaction.")
+        );
+        throw err;
+      }
+    },
+    [fetchTransactions]
+  );
 
   // Update transaction
-  const updateTransaction = useCallback(async (id, transactionData) => {
-    setLoading(true);
-    setError("");
+  const updateTransaction = useCallback(
+    async (id, transactionData) => {
+      if (!id) {
+        throw new Error("Transaction ID is required.");
+      }
 
-    try {
-      const result = await transactionApi.update(id, transactionData);
-      await fetchTransactions();
+      setError("");
 
-      return result;
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to update transaction."
-      );
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchTransactions]);
+      try {
+        const result = await transactionApi.update(id, transactionData);
+        const updated = result?.transaction ?? result?.data ?? result;
+
+        if (!getTransactionId(updated)) {
+          await fetchTransactions();
+        } else {
+          setTransactions((previous) =>
+            previous.map((item) =>
+              String(getTransactionId(item)) === String(id)
+                ? updated
+                : item
+            )
+          );
+        }
+
+        return updated;
+      } catch (err) {
+        setError(
+          getErrorMessage(err, "Failed to update transaction.")
+        );
+        throw err;
+      }
+    },
+    [fetchTransactions]
+  );
 
   // Delete transaction
   const deleteTransaction = useCallback(async (id) => {
-    setLoading(true);
+    if (!id) {
+      throw new Error("Transaction ID is required.");
+    }
+
     setError("");
 
     try {
@@ -92,20 +135,17 @@ export default function useExpense({ autoFetch = true } = {}) {
 
       setTransactions((previous) =>
         previous.filter(
-          (transaction) => String(transaction.id) !== String(id)
+          (transaction) =>
+            String(getTransactionId(transaction)) !== String(id)
         )
       );
 
       return result;
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to delete transaction."
+        getErrorMessage(err, "Failed to delete transaction.")
       );
       throw err;
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -113,7 +153,9 @@ export default function useExpense({ autoFetch = true } = {}) {
   useEffect(() => {
     if (!autoFetch) return;
 
-    fetchTransactions().catch(() => {});
+    fetchTransactions().catch(() => {
+      // The error is already stored in state.
+    });
   }, [autoFetch, fetchTransactions]);
 
   return {
@@ -122,8 +164,15 @@ export default function useExpense({ autoFetch = true } = {}) {
     loading,
     error,
     fetchTransactions,
+
+    // Original names
     createTransaction,
     updateTransaction,
     deleteTransaction,
+
+    // Compatibility aliases for Dashboard.jsx
+    addExpense: createTransaction,
+    editExpense: updateTransaction,
+    removeExpense: deleteTransaction,
   };
 }

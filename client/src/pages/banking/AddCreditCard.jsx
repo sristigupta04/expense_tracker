@@ -1,6 +1,19 @@
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  Check,
+  CreditCard,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Plus,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
+
+const STORAGE_KEY = "expenseTrackerCreditCards";
 
 const initialForm = {
   cardName: "",
@@ -16,27 +29,97 @@ const initialForm = {
   status: "Active",
 };
 
+function readCards() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function formatMoney(amount, currency = "INR") {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(toNumber(amount));
+  } catch {
+    return `${currency} ${toNumber(amount).toLocaleString("en-IN")}`;
+  }
+}
+
+function Field({ label, name, error, required, children }) {
+  return (
+    <div>
+      <label
+        htmlFor={name}
+        className="text-sm font-semibold text-slate-700"
+      >
+        {label}
+        {required && <span className="ml-1 text-rose-500">*</span>}
+      </label>
+
+      {children}
+
+      {error && (
+        <p className="mt-1.5 text-xs font-medium text-rose-600">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function AddCreditCard() {
   const navigate = useNavigate();
+
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState("");
+  const [showDigits, setShowDigits] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const inputClass =
-    "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100";
+    "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
+
+  const creditLimit = toNumber(form.creditLimit);
+  const outstanding = toNumber(form.outstandingAmount);
+  const availableLimit = Math.max(0, creditLimit - outstanding);
+
+  const utilization = useMemo(() => {
+    if (creditLimit <= 0) return 0;
+    return Math.min(100, (outstanding / creditLimit) * 100);
+  }, [creditLimit, outstanding]);
 
   const updateField = (event) => {
     const { name, value } = event.target;
 
-    setForm((previous) => ({ ...previous, [name]: value }));
-    setErrors((previous) => ({ ...previous, [name]: "" }));
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+
+    setErrors((previous) => ({
+      ...previous,
+      [name]: "",
+      submit: "",
+    }));
+
     setMessage("");
   };
 
   const validate = () => {
     const nextErrors = {};
+
     const limit = Number(form.creditLimit);
-    const outstanding = Number(form.outstandingAmount);
+    const currentOutstanding = Number(form.outstandingAmount);
     const minimumDue = Number(form.minimumDue);
 
     if (!form.cardName.trim()) {
@@ -51,17 +134,25 @@ export default function AddCreditCard() {
       nextErrors.lastFourDigits = "Enter exactly four digits.";
     }
 
-    if (form.creditLimit === "" || !Number.isFinite(limit) || limit <= 0) {
+    if (
+      form.creditLimit === "" ||
+      !Number.isFinite(limit) ||
+      limit <= 0
+    ) {
       nextErrors.creditLimit = "Credit limit must be greater than zero.";
     }
 
     if (
       form.outstandingAmount === "" ||
-      !Number.isFinite(outstanding) ||
-      outstanding < 0
+      !Number.isFinite(currentOutstanding) ||
+      currentOutstanding < 0
     ) {
       nextErrors.outstandingAmount = "Enter a valid outstanding amount.";
-    } else if (outstanding > limit) {
+    } else if (
+      Number.isFinite(limit) &&
+      limit > 0 &&
+      currentOutstanding > limit
+    ) {
       nextErrors.outstandingAmount =
         "Outstanding amount cannot exceed the credit limit.";
     }
@@ -72,7 +163,10 @@ export default function AddCreditCard() {
       minimumDue < 0
     ) {
       nextErrors.minimumDue = "Enter a valid minimum due.";
-    } else if (minimumDue > outstanding) {
+    } else if (
+      Number.isFinite(currentOutstanding) &&
+      minimumDue > currentOutstanding
+    ) {
       nextErrors.minimumDue =
         "Minimum due cannot exceed the outstanding amount.";
     }
@@ -88,7 +182,7 @@ export default function AddCreditCard() {
       form.dueDate < form.statementDate
     ) {
       nextErrors.dueDate =
-        "Due date should be on or after the statement date.";
+        "Due date must be on or after the statement date.";
     }
 
     setErrors(nextErrors);
@@ -101,144 +195,157 @@ export default function AddCreditCard() {
 
     if (!validate()) return;
 
+    setSaving(true);
+
     try {
-      const saved = JSON.parse(
-        localStorage.getItem("expenseTrackerCreditCards") || "[]"
+      const saved = readCards();
+
+      const duplicate = saved.some(
+        (card) =>
+          String(card.bankName || "").trim().toLowerCase() ===
+            form.bankName.trim().toLowerCase() &&
+          String(card.lastFourDigits || "") === form.lastFourDigits
       );
 
-      if (!Array.isArray(saved)) {
-        throw new Error("Invalid saved credit card data.");
+      if (duplicate) {
+        setErrors({
+          lastFourDigits:
+            "A card with this bank and last four digits already exists.",
+        });
+        setSaving(false);
+        return;
       }
 
       const card = {
-        id: crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        id:
+          globalThis.crypto?.randomUUID?.() ||
+          `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         ...form,
         cardName: form.cardName.trim(),
         bankName: form.bankName.trim(),
-        creditLimit: Number(form.creditLimit),
-        outstandingAmount: Number(form.outstandingAmount),
-        availableLimit:
-          Number(form.creditLimit) - Number(form.outstandingAmount),
-        minimumDue: Number(form.minimumDue),
+        lastFourDigits: form.lastFourDigits,
+        creditLimit,
+        outstandingAmount: outstanding,
+        availableLimit,
+        minimumDue: toNumber(form.minimumDue),
         createdAt: new Date().toISOString(),
       };
 
       localStorage.setItem(
-        "expenseTrackerCreditCards",
+        STORAGE_KEY,
         JSON.stringify([...saved, card])
       );
 
       setForm(initialForm);
       setErrors({});
-      setMessage("Credit card saved successfully on this device.");
+      setMessage("Credit card saved successfully.");
     } catch (error) {
       console.error("Could not save credit card:", error);
+
       setErrors({
-        submit: "Unable to save. Check your browser storage and try again.",
+        submit: "Unable to save. Check browser storage and try again.",
       });
+    } finally {
+      setSaving(false);
     }
   };
-
-  const currencyFormat = (amount) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: form.currency,
-      maximumFractionDigits: 2,
-    }).format(Number(amount) || 0);
-
-  const availableLimit =
-    Math.max(
-      0,
-      (Number(form.creditLimit) || 0) -
-        (Number(form.outstandingAmount) || 0)
-    );
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
+
+        {/* Back */}
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-5 text-sm font-semibold text-slate-600 hover:text-blue-700"
+          className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1]"
         >
-          ← Back
+          <ArrowLeft size={17} />
+          Back
         </button>
 
-        <div className="mb-7">
-          <p className="text-sm font-semibold uppercase tracking-wider text-blue-700">
+        {/* Header */}
+        <header className="mb-7">
+          <p className="text-sm font-semibold uppercase tracking-wider text-[#2563EB]">
             Banking / Credit Cards
           </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+
+          <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
             Add Credit Card
           </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Manage your credit limit, outstanding balance, and payment dates.
-          </p>
-        </div>
 
-        <section className="mb-6 rounded-2xl bg-gradient-to-br from-blue-950 via-blue-800 to-blue-600 p-6 text-white shadow-lg sm:p-8">
+          <p className="mt-2 text-sm text-slate-500">
+            Track your credit limit, outstanding balance and payment dates.
+          </p>
+        </header>
+
+        {/* Live Card Preview */}
+        <section className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-[#03045E] via-[#023E8A] to-[#2563EB] p-6 text-white shadow-lg sm:p-8">
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-blue-100">
                 {form.bankName || "Bank name"}
               </p>
-              <h2 className="mt-2 text-xl font-bold">
+
+              <h2 className="mt-2 break-words text-xl font-bold">
                 {form.cardName || "Your Credit Card"}
               </h2>
-              <p className="mt-4 text-sm tracking-[0.2em] text-blue-100">
-                •••• •••• •••• {form.lastFourDigits || "••••"}
-              </p>
+
+              <div className="mt-5 flex items-center gap-3">
+                <span className="text-lg tracking-[0.2em]">
+                  {showDigits && form.lastFourDigits
+                    ? `•••• •••• •••• ${form.lastFourDigits}`
+                    : `•••• •••• •••• ${form.lastFourDigits || "••••"}`}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDigits((value) => !value)}
+                  aria-label={showDigits ? "Hide card digits" : "Show card digits"}
+                  className="rounded-lg p-1.5 text-blue-100 transition hover:bg-white/10"
+                >
+                  {showDigits ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-            <span className="rounded-lg border border-white/30 px-3 py-1 text-xs">
+
+            <div className="shrink-0 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-semibold">
               {form.cardType}
-            </span>
+            </div>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-5">
             <div>
               <p className="text-xs text-blue-100">Credit limit</p>
-              <p className="mt-1 text-xl font-bold">
-                {currencyFormat(form.creditLimit)}
+              <p className="mt-1 break-words text-xl font-bold">
+                {formatMoney(form.creditLimit, form.currency)}
               </p>
             </div>
+
             <div>
               <p className="text-xs text-blue-100">Available limit</p>
-              <p className="mt-1 text-xl font-bold">
-                {currencyFormat(availableLimit)}
+              <p className="mt-1 break-words text-xl font-bold">
+                {formatMoney(availableLimit, form.currency)}
               </p>
             </div>
           </div>
 
-          <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/20">
-            <div
-              className="h-full rounded-full bg-white transition-all"
-              style={{
-                width: `${
-                  Number(form.creditLimit) > 0
-                    ? Math.min(
-                        100,
-                        (Number(form.outstandingAmount) /
-                          Number(form.creditLimit)) *
-                          100
-                      )
-                    : 0
-                }%`,
-              }}
-            />
+          <div className="mt-6">
+            <div className="flex justify-between text-xs text-blue-100">
+              <span>Credit utilization</span>
+              <span>{utilization.toFixed(1)}%</span>
+            </div>
+
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-white transition-all"
+                style={{ width: `${utilization}%` }}
+              />
+            </div>
           </div>
-          <p className="mt-2 text-xs text-blue-100">
-            {Number(form.creditLimit) > 0
-              ? `${Math.round(
-                  (Number(form.outstandingAmount) /
-                    Number(form.creditLimit)) *
-                    100
-                )}% of limit used`
-              : "Your credit utilization will appear here."}
-          </p>
         </section>
 
+        {/* Form */}
         <form
           onSubmit={handleSubmit}
           noValidate
@@ -247,34 +354,53 @@ export default function AddCreditCard() {
           {message && (
             <div
               role="status"
-              className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+              className="mb-6 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between"
             >
-              {message}
-              <button
-                type="button"
-                onClick={() => navigate("/credit-cards")}
-                className="ml-2 underline"
+              <div className="flex items-center gap-2">
+                <Check size={18} />
+                {message}
+              </div>
+
+              <Link
+                to="/credit-cards"
+                className="font-semibold underline"
               >
                 View cards
-              </button>
+              </Link>
             </div>
           )}
 
           {errors.submit && (
-            <p role="alert" className="mb-5 text-sm text-red-600">
+            <p
+              role="alert"
+              className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"
+            >
               {errors.submit}
             </p>
           )}
 
-          <h2 className="mb-5 text-lg font-bold text-slate-900">
-            Card information
-          </h2>
+          <div className="mb-6 flex items-center gap-3">
+            <div className="rounded-xl bg-blue-50 p-2.5 text-[#0D21A1]">
+              <CreditCard size={21} />
+            </div>
+
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Card Information
+              </h2>
+              <p className="text-xs text-slate-500">
+                Enter your card details below.
+              </p>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div>
-              <label htmlFor="cardName" className="text-sm font-semibold text-slate-700">
-                Card nickname *
-              </label>
+            <Field
+              label="Card nickname"
+              name="cardName"
+              required
+              error={errors.cardName}
+            >
               <input
                 id="cardName"
                 name="cardName"
@@ -282,16 +408,16 @@ export default function AddCreditCard() {
                 onChange={updateField}
                 placeholder="e.g. My Shopping Card"
                 className={inputClass}
+                maxLength={50}
               />
-              {errors.cardName && (
-                <p className="mt-1 text-sm text-red-600">{errors.cardName}</p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="bankName" className="text-sm font-semibold text-slate-700">
-                Bank / Issuer *
-              </label>
+            <Field
+              label="Bank / Issuer"
+              name="bankName"
+              required
+              error={errors.bankName}
+            >
               <input
                 id="bankName"
                 name="bankName"
@@ -299,45 +425,44 @@ export default function AddCreditCard() {
                 onChange={updateField}
                 placeholder="e.g. HDFC Bank"
                 className={inputClass}
+                maxLength={60}
               />
-              {errors.bankName && (
-                <p className="mt-1 text-sm text-red-600">{errors.bankName}</p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="lastFourDigits" className="text-sm font-semibold text-slate-700">
-                Last 4 digits *
-              </label>
+            <Field
+              label="Last 4 digits"
+              name="lastFourDigits"
+              required
+              error={errors.lastFourDigits}
+            >
               <input
                 id="lastFourDigits"
                 name="lastFourDigits"
                 value={form.lastFourDigits}
-                onChange={(event) =>
-                  updateField({
-                    target: {
-                      name: "lastFourDigits",
-                      value: event.target.value.replace(/\D/g, "").slice(0, 4),
-                    },
-                  })
-                }
+                onChange={(event) => {
+                  setForm((previous) => ({
+                    ...previous,
+                    lastFourDigits: event.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 4),
+                  }));
+
+                  setErrors((previous) => ({
+                    ...previous,
+                    lastFourDigits: "",
+                    submit: "",
+                  }));
+                  setMessage("");
+                }}
                 inputMode="numeric"
                 autoComplete="off"
                 maxLength={4}
                 placeholder="1234"
                 className={inputClass}
               />
-              {errors.lastFourDigits && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.lastFourDigits}
-                </p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="cardType" className="text-sm font-semibold text-slate-700">
-                Card type
-              </label>
+            <Field label="Card type" name="cardType">
               <select
                 id="cardType"
                 name="cardType"
@@ -347,12 +472,14 @@ export default function AddCreditCard() {
               >
                 <option value="Credit">Credit Card</option>
               </select>
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="creditLimit" className="text-sm font-semibold text-slate-700">
-                Total credit limit *
-              </label>
+            <Field
+              label="Total credit limit"
+              name="creditLimit"
+              required
+              error={errors.creditLimit}
+            >
               <input
                 id="creditLimit"
                 name="creditLimit"
@@ -364,15 +491,14 @@ export default function AddCreditCard() {
                 placeholder="50000"
                 className={inputClass}
               />
-              {errors.creditLimit && (
-                <p className="mt-1 text-sm text-red-600">{errors.creditLimit}</p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="outstandingAmount" className="text-sm font-semibold text-slate-700">
-                Current outstanding *
-              </label>
+            <Field
+              label="Current outstanding"
+              name="outstandingAmount"
+              required
+              error={errors.outstandingAmount}
+            >
               <input
                 id="outstandingAmount"
                 name="outstandingAmount"
@@ -381,19 +507,17 @@ export default function AddCreditCard() {
                 step="0.01"
                 value={form.outstandingAmount}
                 onChange={updateField}
+                placeholder="0"
                 className={inputClass}
               />
-              {errors.outstandingAmount && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.outstandingAmount}
-                </p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="statementDate" className="text-sm font-semibold text-slate-700">
-                Statement date *
-              </label>
+            <Field
+              label="Statement date"
+              name="statementDate"
+              required
+              error={errors.statementDate}
+            >
               <input
                 id="statementDate"
                 name="statementDate"
@@ -402,17 +526,14 @@ export default function AddCreditCard() {
                 onChange={updateField}
                 className={inputClass}
               />
-              {errors.statementDate && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.statementDate}
-                </p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="dueDate" className="text-sm font-semibold text-slate-700">
-                Payment due date *
-              </label>
+            <Field
+              label="Payment due date"
+              name="dueDate"
+              required
+              error={errors.dueDate}
+            >
               <input
                 id="dueDate"
                 name="dueDate"
@@ -421,15 +542,14 @@ export default function AddCreditCard() {
                 onChange={updateField}
                 className={inputClass}
               />
-              {errors.dueDate && (
-                <p className="mt-1 text-sm text-red-600">{errors.dueDate}</p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="minimumDue" className="text-sm font-semibold text-slate-700">
-                Minimum amount due *
-              </label>
+            <Field
+              label="Minimum amount due"
+              name="minimumDue"
+              required
+              error={errors.minimumDue}
+            >
               <input
                 id="minimumDue"
                 name="minimumDue"
@@ -438,17 +558,12 @@ export default function AddCreditCard() {
                 step="0.01"
                 value={form.minimumDue}
                 onChange={updateField}
+                placeholder="0"
                 className={inputClass}
               />
-              {errors.minimumDue && (
-                <p className="mt-1 text-sm text-red-600">{errors.minimumDue}</p>
-              )}
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="currency" className="text-sm font-semibold text-slate-700">
-                Currency
-              </label>
+            <Field label="Currency" name="currency">
               <select
                 id="currency"
                 name="currency"
@@ -461,12 +576,9 @@ export default function AddCreditCard() {
                 <option value="EUR">EUR — Euro (€)</option>
                 <option value="GBP">GBP — British Pound (£)</option>
               </select>
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="status" className="text-sm font-semibold text-slate-700">
-                Status
-              </label>
+            <Field label="Card status" name="status">
               <select
                 id="status"
                 name="status"
@@ -477,31 +589,64 @@ export default function AddCreditCard() {
                 <option value="Active">Active</option>
                 <option value="Archived">Archived</option>
               </select>
+            </Field>
+          </div>
+
+          {/* Security Note */}
+          <div className="mt-7 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <LockKeyhole
+              size={19}
+              className="mt-0.5 shrink-0 text-[#0D21A1]"
+            />
+
+            <div>
+              <p className="text-sm font-semibold text-blue-950">
+                Keep your card information safe
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-blue-900/75">
+                Enter only the last four digits. Never enter your full card
+                number, CVV, PIN or OTP.
+              </p>
             </div>
           </div>
 
+          {/* Buttons */}
           <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              disabled={saving}
+              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
+
             <button
               type="submit"
-              className="rounded-xl bg-blue-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Save Credit Card
+              {saving ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Plus size={17} />
+                  Save Credit Card
+                </>
+              )}
             </button>
           </div>
         </form>
 
-        <p className="mt-4 text-xs leading-5 text-slate-500">
-          Demo mode: details are saved in this browser only. No bank connection
-          or server storage is configured yet. Store only the last four digits;
-          never enter your full card number, CVV, PIN, or OTP.
-        </p>
+        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
+          <ShieldCheck size={15} className="mt-0.5 shrink-0" />
+          Demo mode: card details are saved in this browser's local storage.
+          No live bank connection or server storage is configured.
+        </div>
       </div>
     </main>
   );

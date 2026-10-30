@@ -11,6 +11,14 @@ import {
   LockKeyhole,
 } from "lucide-react";
 
+const reasons = [
+  "I no longer need this app",
+  "I am switching to another service",
+  "I have privacy concerns",
+  "I am experiencing technical issues",
+  "Other",
+];
+
 export default function DeleteAccount() {
   const navigate = useNavigate();
 
@@ -21,22 +29,24 @@ export default function DeleteAccount() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null);
 
-  const reasons = [
-    "I no longer need this app",
-    "I am switching to another service",
-    "I have privacy concerns",
-    "I am experiencing technical issues",
-    "Other",
-  ];
-
   function handleContinue(event) {
     event.preventDefault();
     setStatus(null);
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail) {
       setStatus({
         type: "error",
         text: "Enter your account email address.",
+      });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setStatus({
+        type: "error",
+        text: "Please enter a valid email address.",
       });
       return;
     }
@@ -57,21 +67,25 @@ export default function DeleteAccount() {
       return;
     }
 
+    setEmail(cleanEmail);
     setShowConfirm(true);
   }
 
   async function handleDeleteRequest() {
+    if (busy) return;
+
     setBusy(true);
     setStatus(null);
 
     try {
       /*
-       * TODO: Connect an authenticated backend deletion endpoint.
-       * Verify the user's identity on the server before deletion.
+       * Backend deletion is intentionally not connected.
        * Never delete an account using only a client-side email value.
+       * A real implementation must verify identity on the server.
        */
 
       setShowConfirm(false);
+
       setStatus({
         type: "error",
         text: "Account deletion is not connected yet. Your account has NOT been deleted. Connect the backend API before enabling permanent deletion.",
@@ -89,6 +103,7 @@ export default function DeleteAccount() {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-3xl">
+        {/* Back button */}
         <button
           type="button"
           onClick={() => navigate("/settings/account")}
@@ -98,6 +113,7 @@ export default function DeleteAccount() {
           Back to Account Management
         </button>
 
+        {/* Header */}
         <header className="mb-7">
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-red-700">
             <Trash2 size={15} />
@@ -114,6 +130,7 @@ export default function DeleteAccount() {
           </p>
         </header>
 
+        {/* Status message */}
         {status && (
           <div
             role="status"
@@ -129,6 +146,7 @@ export default function DeleteAccount() {
             ) : (
               <AlertTriangle size={19} className="mt-0.5 shrink-0" />
             )}
+
             <span>{status.text}</span>
           </div>
         )}
@@ -140,10 +158,12 @@ export default function DeleteAccount() {
               size={25}
               className="mt-0.5 shrink-0 text-red-700"
             />
+
             <div>
               <h2 className="font-bold text-red-950">
                 This action may be irreversible
               </h2>
+
               <p className="mt-2 text-sm leading-6 text-red-900">
                 A fully implemented account deletion process may remove your
                 profile and associated financial records. Review your
@@ -166,20 +186,23 @@ export default function DeleteAccount() {
               />
               Export any transaction or report data you want to keep.
             </li>
+
             <li className="flex items-start gap-3">
               <CheckCircle2
                 size={18}
                 className="mt-1 shrink-0 text-blue-700"
               />
-              Check whether shared expenses or other users depend on your account.
+              Check whether shared expenses or other users depend on your
+              account.
             </li>
+
             <li className="flex items-start gap-3">
               <LockKeyhole
                 size={18}
                 className="mt-1 shrink-0 text-blue-700"
               />
-              A real deletion request should require authenticated server-side
-              verification.
+              A real deletion request should require authenticated
+              server-side verification.
             </li>
           </ul>
 
@@ -198,6 +221,7 @@ export default function DeleteAccount() {
           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
         >
           <h2 className="text-lg font-bold">Deletion request</h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Confirm your details and review the final warning.
           </p>
@@ -209,6 +233,7 @@ export default function DeleteAccount() {
             >
               Account email address
             </label>
+
             <input
               id="delete-email"
               type="email"
@@ -220,6 +245,7 @@ export default function DeleteAccount() {
               placeholder="Enter your account email"
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-50"
             />
+
             <p className="mt-2 text-xs leading-5 text-slate-400">
               This field is for confirmation in the interface. It does not
               verify your identity by itself.
@@ -233,6 +259,7 @@ export default function DeleteAccount() {
             >
               Why are you leaving?
             </label>
+
             <select
               id="delete-reason"
               required
@@ -241,6 +268,7 @@ export default function DeleteAccount() {
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-4 focus:ring-red-50"
             >
               <option value="">Select a reason</option>
+
               {reasons.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -256,6 +284,7 @@ export default function DeleteAccount() {
               onChange={(event) => setAcknowledged(event.target.checked)}
               className="mt-1 h-4 w-4 accent-red-700"
             />
+
             <span className="text-sm leading-6 text-slate-700">
               I understand that permanent deletion may remove my account and
               associated data, subject to the application's data-retention
@@ -263,6 +292,7 @@ export default function DeleteAccount() {
             </span>
           </label>
 
+          {/* Form actions */}
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
             <button
               type="button"
@@ -283,10 +313,10 @@ export default function DeleteAccount() {
         </form>
       </div>
 
-      {/* Final confirmation */}
+      {/* Final confirmation dialog */}
       {showConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
           onClick={() => !busy && setShowConfirm(false)}
         >
           <section
@@ -300,12 +330,13 @@ export default function DeleteAccount() {
               <div className="rounded-xl bg-red-50 p-3 text-red-700">
                 <Trash2 size={24} />
               </div>
+
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setShowConfirm(false)}
                 aria-label="Close confirmation"
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 disabled:opacity-50"
               >
                 <X size={19} />
               </button>
@@ -332,7 +363,7 @@ export default function DeleteAccount() {
                 type="button"
                 disabled={busy}
                 onClick={() => setShowConfirm(false)}
-                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Go back
               </button>
@@ -341,7 +372,7 @@ export default function DeleteAccount() {
                 type="button"
                 disabled={busy}
                 onClick={handleDeleteRequest}
-                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy ? "Processing..." : "Confirm request"}
               </button>

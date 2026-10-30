@@ -3,13 +3,11 @@ import api from "./api";
 const BASE_URL = "/bank-transactions";
 
 const bankTransactionService = {
-  // Get all bank transactions with optional filters
   getAll: async (params = {}) => {
     const response = await api.get(BASE_URL, { params });
     return response.data;
   },
 
-  // Get transaction by ID
   getById: async (transactionId) => {
     if (!transactionId) {
       throw new Error("Transaction ID is required.");
@@ -22,7 +20,6 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Get transactions for a specific bank account
   getByAccount: async (accountId, params = {}) => {
     if (!accountId) {
       throw new Error("Bank account ID is required.");
@@ -36,20 +33,26 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Create a bank transaction
   create: async (transactionData) => {
-    if (!transactionData) {
-      throw new Error("Transaction data is required.");
+    if (
+      !transactionData ||
+      typeof transactionData !== "object" ||
+      Array.isArray(transactionData)
+    ) {
+      throw new Error("Valid transaction data is required.");
     }
 
     const response = await api.post(BASE_URL, transactionData);
     return response.data;
   },
 
-  // Update a bank transaction
   update: async (transactionId, transactionData) => {
     if (!transactionId) {
       throw new Error("Transaction ID is required.");
+    }
+
+    if (!transactionData || typeof transactionData !== "object") {
+      throw new Error("Valid transaction data is required.");
     }
 
     const response = await api.put(
@@ -60,7 +63,6 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Delete a bank transaction
   remove: async (transactionId) => {
     if (!transactionId) {
       throw new Error("Transaction ID is required.");
@@ -73,21 +75,46 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Get transactions using date, type, status and amount filters
-  getFiltered: async ({
-    accountId,
-    type,
-    status,
-    startDate,
-    endDate,
-    minAmount,
-    maxAmount,
-    search,
-    page = 1,
-    limit = 10,
-    sortBy = "date",
-    sortOrder = "desc",
-  } = {}) => {
+  getFiltered: async (filters = {}) => {
+    const {
+      accountId,
+      type,
+      status,
+      startDate,
+      endDate,
+      minAmount,
+      maxAmount,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = "date",
+      sortOrder = "desc",
+    } = filters;
+
+    if (!Number.isInteger(Number(page)) || Number(page) < 1) {
+      throw new Error("Page must be a positive integer.");
+    }
+
+    if (!Number.isInteger(Number(limit)) || Number(limit) < 1) {
+      throw new Error("Limit must be a positive integer.");
+    }
+
+    if (
+      minAmount !== undefined &&
+      minAmount !== "" &&
+      !Number.isFinite(Number(minAmount))
+    ) {
+      throw new Error("Minimum amount must be a valid number.");
+    }
+
+    if (
+      maxAmount !== undefined &&
+      maxAmount !== "" &&
+      !Number.isFinite(Number(maxAmount))
+    ) {
+      throw new Error("Maximum amount must be a valid number.");
+    }
+
     const params = {
       ...(accountId && { accountId }),
       ...(type && type !== "All" && { type }),
@@ -96,9 +123,9 @@ const bankTransactionService = {
       ...(endDate && { endDate }),
       ...(minAmount !== undefined && minAmount !== "" && { minAmount }),
       ...(maxAmount !== undefined && maxAmount !== "" && { maxAmount }),
-      ...(search && { search }),
-      page,
-      limit,
+      ...(search?.trim() && { search: search.trim() }),
+      page: Number(page),
+      limit: Number(limit),
       sortBy,
       sortOrder,
     };
@@ -107,7 +134,6 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Mark a transaction as matched during reconciliation
   markMatched: async (transactionId, matchData = {}) => {
     if (!transactionId) {
       throw new Error("Transaction ID is required.");
@@ -121,7 +147,6 @@ const bankTransactionService = {
     return response.data;
   },
 
-  // Get transaction summary
   getSummary: async (params = {}) => {
     const response = await api.get(`${BASE_URL}/summary`, { params });
     return response.data;

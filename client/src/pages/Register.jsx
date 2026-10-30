@@ -19,10 +19,22 @@ import {
 import { register } from "../services/authService";
 
 const passwordRules = [
-  { label: "At least 12 characters", test: (value) => value.length >= 12 },
-  { label: "One uppercase letter", test: (value) => /[A-Z]/.test(value) },
-  { label: "One lowercase letter", test: (value) => /[a-z]/.test(value) },
-  { label: "One number", test: (value) => /\d/.test(value) },
+  {
+    label: "At least 12 characters",
+    test: (value) => value.length >= 12,
+  },
+  {
+    label: "One uppercase letter",
+    test: (value) => /[A-Z]/.test(value),
+  },
+  {
+    label: "One lowercase letter",
+    test: (value) => /[a-z]/.test(value),
+  },
+  {
+    label: "One number",
+    test: (value) => /\d/.test(value),
+  },
   {
     label: "One special character",
     test: (value) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value),
@@ -64,7 +76,7 @@ export default function Register() {
     setError("");
 
     const cleanUsername = username.trim();
-    const cleanEmail = email.trim();
+    const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanUsername || !cleanEmail || !password || !confirmPassword) {
       setError("Please fill in all fields.");
@@ -91,9 +103,9 @@ export default function Register() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       await register({
         name: cleanUsername,
         email: cleanEmail,
@@ -117,24 +129,28 @@ export default function Register() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 sm:px-6">
       <div className="w-full max-w-md">
+
+        {/* Brand */}
         <Link
           to="/"
           aria-label="Expense Tracker home"
           className="mb-8 flex items-center justify-center gap-3"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-800 text-white shadow-lg shadow-blue-900/20">
             <Wallet size={25} strokeWidth={2.2} />
           </div>
 
           <span className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Expense<span className="text-blue-600">Tracker</span>
+            Expense<span className="text-blue-700">Tracker</span>
           </span>
         </Link>
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
           <div className="p-6 sm:p-9">
+
+            {/* Heading */}
             <div className="mb-7 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
                 <UserRound size={26} />
               </div>
 
@@ -148,6 +164,8 @@ export default function Register() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+
+              {/* Full Name */}
               <div>
                 <label
                   htmlFor="register-name"
@@ -175,11 +193,12 @@ export default function Register() {
                     maxLength={80}
                     required
                     disabled={loading}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
                   />
                 </div>
               </div>
 
+              {/* Email */}
               <div>
                 <label
                   htmlFor="register-email"
@@ -206,11 +225,12 @@ export default function Register() {
                     }}
                     required
                     disabled={loading}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
                   />
                 </div>
               </div>
 
+              {/* Password */}
               <div>
                 <label
                   htmlFor="register-password"
@@ -237,7 +257,7 @@ export default function Register() {
                     }}
                     required
                     disabled={loading}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
                   />
 
                   <button
@@ -251,13 +271,14 @@ export default function Register() {
                   </button>
                 </div>
 
+                {/* Password Strength */}
                 {password && (
                   <div className="mt-3">
                     <div className="mb-2 flex gap-1.5">
                       {passwordChecks.map((check) => (
                         <div
                           key={check.label}
-                          className={`h-1.5 flex-1 rounded-full ${
+                          className={`h-1.5 flex-1 rounded-full transition-colors ${
                             check.valid ? "bg-emerald-500" : "bg-slate-200"
                           }`}
                         />
@@ -283,6 +304,7 @@ export default function Register() {
                           ) : (
                             <span className="ml-0.5 mr-0.5 h-2 w-2 rounded-full bg-slate-300" />
                           )}
+
                           {check.label}
                         </li>
                       ))}
@@ -291,6 +313,7 @@ export default function Register() {
                 )}
               </div>
 
+              {/* Confirm Password */}
               <div>
                 <label
                   htmlFor="register-confirm-password"
@@ -317,7 +340,7 @@ export default function Register() {
                     }}
                     required
                     disabled={loading}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
                   />
 
                   <button
@@ -362,6 +385,7 @@ export default function Register() {
                 )}
               </div>
 
+              {/* Error */}
               {error && (
                 <div
                   role="alert"
@@ -372,10 +396,11 @@ export default function Register() {
                 </div>
               )}
 
+              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-800 px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-900/20 transition hover:bg-blue-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <>
@@ -391,17 +416,19 @@ export default function Register() {
               </button>
             </form>
 
+            {/* Login Link */}
             <p className="mt-7 text-center text-sm text-slate-600">
               Already have an account?{" "}
               <Link
                 to="/login"
-                className="font-bold text-blue-600 transition hover:text-blue-700 hover:underline"
+                className="font-bold text-blue-700 transition hover:text-blue-900 hover:underline"
               >
                 Sign in
               </Link>
             </p>
           </div>
 
+          {/* Footer */}
           <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-4 text-xs font-medium text-slate-500">
             <ShieldCheck size={16} className="text-emerald-600" />
             Your finances, organized in one place

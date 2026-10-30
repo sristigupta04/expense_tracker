@@ -1,4 +1,3 @@
-
 const Budget = require("../models/Budget");
 const Transaction = require("../models/Transaction");
 const Notification = require("../models/notification");
@@ -9,19 +8,38 @@ const THRESHOLDS = [
   { percent: 100, label: "Budget limit reached" },
 ];
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function createBudgetAlerts(userId, targetMonth, targetYear) {
+  if (!userId) {
+    throw new Error("User ID is required to create budget alerts.");
+  }
+
   const now = new Date();
   const month = targetMonth ?? now.getMonth() + 1;
   const year = targetYear ?? now.getFullYear();
 
+  if (
+    !Number.isInteger(Number(month)) ||
+    Number(month) < 1 ||
+    Number(month) > 12 ||
+    !Number.isInteger(Number(year))
+  ) {
+    throw new Error("Invalid budget month or year.");
+  }
+
   const budgets = await Budget.find({
     user: userId,
-    month,
-    year,
+    month: Number(month),
+    year: Number(year),
   });
 
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 1);
+  if (!budgets.length) return;
+
+  const startDate = new Date(Number(year), Number(month) - 1, 1);
+  const endDate = new Date(Number(year), Number(month), 1);
 
   const expenses = await Transaction.find({
     user: userId,
@@ -30,18 +48,24 @@ async function createBudgetAlerts(userId, targetMonth, targetYear) {
   }).select("amount category");
 
   for (const budget of budgets) {
-    const categoryExpenses = expenses.filter(
-      (transaction) =>
-        String(transaction.category).trim().toLowerCase() ===
-        String(budget.category).trim().toLowerCase()
-    );
+    const category = String(budget.category || "").trim();
 
-    const spent = categoryExpenses.reduce(
-      (total, transaction) => total + Number(transaction.amount || 0),
-      0
-    );
+    if (!category) continue;
+
+    const spent = expenses
+      .filter(
+        (transaction) =>
+          String(transaction.category || "").trim().toLowerCase() ===
+          category.toLowerCase()
+      )
+      .reduce(
+        (total, transaction) =>
+          total + Math.max(0, Number(transaction.amount) || 0),
+        0
+      );
 
     const limit = Number(budget.limit);
+
     if (!Number.isFinite(limit) || limit <= 0) continue;
 
     const usage = (spent / limit) * 100;
@@ -49,22 +73,18 @@ async function createBudgetAlerts(userId, targetMonth, targetYear) {
     for (const threshold of THRESHOLDS) {
       if (usage < threshold.percent) continue;
 
-      const title = `${threshold.label}: ${budget.category}`;
+      const title = `${threshold.label}: ${category}`;
+      const period = `${month}/${year}`;
       const message =
-        `${budget.category} budget for ${month}/${year} is ` +
-        `${usage.toFixed(0)}% used. Spent: ${spent.toFixed(2)}; ` +
-        `budget: ${limit.toFixed(2)}.`;
+        `${category} budget for ${period} is ${usage.toFixed(0)}% used. ` +
+        `Spent: ${spent.toFixed(2)}; budget: ${limit.toFixed(2)}.`;
 
-      // Prevent repeated notifications for the same threshold,
-      // category and budget month.
       const existing = await Notification.findOne({
         user: userId,
         type: "budget",
         title,
         message: {
-          $regex: new RegExp(
-            `^${budget.category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} budget for ${month}/${year} is `
-          ),
+          $regex: `^${escapeRegex(category)} budget for ${escapeRegex(period)} is `,
         },
       }).select("_id");
 

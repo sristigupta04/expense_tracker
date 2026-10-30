@@ -13,6 +13,7 @@ import {
   KeyRound,
   RefreshCw,
 } from "lucide-react";
+
 import api from "../services/api";
 
 export default function ForgotPassword() {
@@ -23,6 +24,7 @@ export default function ForgotPassword() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+
     setError("");
     setSuccess(false);
 
@@ -33,6 +35,13 @@ export default function ForgotPassword() {
       return;
     }
 
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(cleanEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -40,6 +49,7 @@ export default function ForgotPassword() {
         email: cleanEmail,
       });
 
+      setEmail(cleanEmail);
       setSuccess(true);
     } catch (err) {
       setError(
@@ -51,9 +61,16 @@ export default function ForgotPassword() {
     }
   }
 
+  function handleTryAnotherEmail() {
+    setSuccess(false);
+    setError("");
+    setEmail("");
+  }
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F4F7FF] px-4 py-8 sm:px-6 lg:px-8">
-      {/* Soft background decoration */}
+
+      {/* Background Decorations */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -left-28 -top-28 h-80 w-80 rounded-full bg-blue-200/40 blur-3xl"
@@ -64,28 +81,39 @@ export default function ForgotPassword() {
         className="pointer-events-none absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl"
       />
 
+      {/* Main Container */}
       <div className="relative z-10 w-full max-w-[440px]">
+
         {/* Brand */}
         <Link
           to="/"
           aria-label="Expense Tracker home"
-          className="mb-8 flex items-center justify-center gap-3"
+          className="mb-8 flex items-center justify-center gap-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-4"
         >
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0D21A1] text-white shadow-lg shadow-blue-900/20">
             <Wallet size={25} strokeWidth={2.2} />
           </div>
 
           <span className="text-2xl font-extrabold tracking-tight text-[#111827]">
-            Expense<span className="text-[#2563EB]">Tracker</span>
+            Expense
+            <span className="text-[#2563EB]">Tracker</span>
           </span>
         </Link>
 
-        {/* Main card */}
+        {/* Forgot Password Card */}
         <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_80px_-30px_rgba(30,64,175,0.22)]">
+
           <div className="p-6 sm:p-9">
+
             {/* Icon */}
             <div className="mb-6 flex justify-center">
-              <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#EEF4FF] text-[#0D21A1]">
+              <div
+                className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-[24px] ${
+                  success
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-[#EEF4FF] text-[#0D21A1]"
+                }`}
+              >
                 {success ? (
                   <CircleCheck size={34} strokeWidth={1.8} />
                 ) : (
@@ -103,7 +131,7 @@ export default function ForgotPassword() {
             {/* Heading */}
             <div className="mb-8 text-center">
               <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#2563EB]">
-                Account recovery
+                Account Recovery
               </p>
 
               <h1 className="text-[28px] font-extrabold tracking-tight text-[#111827] sm:text-[32px]">
@@ -117,10 +145,14 @@ export default function ForgotPassword() {
               </p>
             </div>
 
-            {/* Success state */}
+            {/* Success State */}
             {success ? (
               <div className="space-y-5">
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+
+                <div
+                  role="status"
+                  className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4"
+                >
                   <div className="flex items-start gap-3">
                     <CircleCheck
                       size={20}
@@ -132,41 +164,47 @@ export default function ForgotPassword() {
                         Reset request submitted
                       </p>
 
-                      <p className="mt-1 break-words text-sm leading-5 text-emerald-700">
-                        Email entered: {email.trim()}
+                      <p className="mt-1 break-all text-sm leading-5 text-emerald-700">
+                        Email entered: {email}
                       </p>
 
                       <p className="mt-2 text-xs leading-5 text-emerald-700">
-                        Check your inbox and spam folder. The reset link must
-                        be generated by the server and sent by email.
+                        Check your inbox and spam folder for the password
+                        reset instructions.
                       </p>
                     </div>
                   </div>
                 </div>
 
+                {/* Try Another Email */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setSuccess(false);
-                    setError("");
-                  }}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+                  onClick={handleTryAnotherEmail}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   <RefreshCw size={17} />
                   Try another email
                 </button>
 
+                {/* Login Link */}
                 <Link
                   to="/login"
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E]"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Back to sign in
                   <ArrowRight size={18} />
                 </Link>
               </div>
             ) : (
-              /* Reset request form */
-              <form onSubmit={handleSubmit} className="space-y-5">
+
+              /* Reset Request Form */
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-5"
+                noValidate
+              >
+
+                {/* Email Input */}
                 <div>
                   <label
                     htmlFor="forgot-email"
@@ -183,6 +221,7 @@ export default function ForgotPassword() {
 
                     <input
                       id="forgot-email"
+                      name="email"
                       type="email"
                       autoComplete="email"
                       placeholder="you@example.com"
@@ -193,11 +232,12 @@ export default function ForgotPassword() {
                       }}
                       required
                       disabled={loading}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </div>
                 </div>
 
+                {/* Error Message */}
                 {error && (
                   <div
                     role="alert"
@@ -207,23 +247,29 @@ export default function ForgotPassword() {
                       size={19}
                       className="mt-0.5 shrink-0"
                     />
+
                     <p className="leading-5">{error}</p>
                   </div>
                 )}
 
+                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="group flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E] hover:shadow-xl active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#03045E] hover:shadow-xl active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? (
                     <>
-                      <LoaderCircle size={19} className="animate-spin" />
+                      <LoaderCircle
+                        size={19}
+                        className="animate-spin"
+                      />
                       Sending request...
                     </>
                   ) : (
                     <>
                       Send reset link
+
                       <ArrowRight
                         size={18}
                         className="transition-transform group-hover:translate-x-1"
@@ -234,12 +280,12 @@ export default function ForgotPassword() {
               </form>
             )}
 
-            {/* Back link */}
+            {/* Back to Login */}
             {!success && (
               <div className="mt-7 text-center">
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1]"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1] focus:outline-none focus:underline"
                 >
                   <ArrowLeft size={17} />
                   Back to sign in
@@ -248,16 +294,18 @@ export default function ForgotPassword() {
             )}
           </div>
 
-          {/* Security footer */}
+          {/* Security Footer */}
           <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-[#FAFBFF] px-4 py-4 text-center text-xs font-medium leading-5 text-slate-500 sm:px-6">
             <ShieldCheck
               size={17}
               className="shrink-0 text-emerald-600"
             />
+
             Your account security matters to us.
           </div>
         </section>
 
+        {/* Bottom Note */}
         <p className="mt-6 text-center text-xs text-slate-400">
           Track smarter. Spend better.
         </p>

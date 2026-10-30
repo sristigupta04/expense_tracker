@@ -1,11 +1,17 @@
 
 import { useState } from "react";
-import { CalendarDays, Plus, Download } from "lucide-react";
+import {
+  CalendarDays,
+  Plus,
+  Download,
+  LoaderCircle,
+} from "lucide-react";
 
 export default function WelcomeHeader({
   userName = "there",
   onAddTransaction,
   onExport,
+  exporting = false,
 }) {
   const [showDate, setShowDate] = useState(false);
 
@@ -18,17 +24,33 @@ export default function WelcomeHeader({
     year: "numeric",
   });
 
+  const displayName =
+    typeof userName === "string" && userName.trim()
+      ? userName.trim().split(" ")[0]
+      : "there";
+
+  const handleExport = async () => {
+    if (!onExport || exporting) return;
+
+    try {
+      await onExport();
+    } catch (error) {
+      console.error("Export failed:", error);
+    }
+  };
+
   return (
-    <section className="mb-7">
+    <section className="mb-7 min-w-0">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+        {/* Welcome content */}
+        <div className="min-w-0">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
             <CalendarDays size={14} />
             Financial overview
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Welcome back, {userName}!
+          <h1 className="break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Welcome back, {displayName}!
           </h1>
 
           <p className="mt-2 text-sm text-slate-500 sm:text-base">
@@ -38,28 +60,36 @@ export default function WelcomeHeader({
           <button
             type="button"
             onClick={() => setShowDate((current) => !current)}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-blue-600"
+            aria-expanded={showDate}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-medium text-slate-500 transition hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             <CalendarDays size={14} />
             {showDate ? "Hide date" : "View today's date"}
           </button>
 
           {showDate && (
-            <p className="mt-1 text-sm font-medium text-slate-700">
+            <p className="mt-2 text-sm font-semibold text-slate-700">
               {formattedDate}
             </p>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Actions */}
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           {onExport && (
             <button
               type="button"
-              onClick={onExport}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
+              onClick={handleExport}
+              disabled={exporting}
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
             >
-              <Download size={17} />
-              Export
+              {exporting ? (
+                <LoaderCircle size={17} className="animate-spin" />
+              ) : (
+                <Download size={17} />
+              )}
+
+              {exporting ? "Exporting..." : "Export"}
             </button>
           )}
 
@@ -67,7 +97,7 @@ export default function WelcomeHeader({
             type="button"
             onClick={onAddTransaction}
             disabled={!onAddTransaction}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             <Plus size={18} />
             Add transaction

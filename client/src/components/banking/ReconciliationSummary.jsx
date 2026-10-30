@@ -1,3 +1,4 @@
+
 import {
   CheckCircle2,
   AlertTriangle,
@@ -11,45 +12,57 @@ import {
   CircleDollarSign,
 } from "lucide-react";
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
 const formatCurrency = (amount, currency = "INR") => {
+  const value = toNumber(amount);
+
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(value);
   } catch {
-    return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+    return `₹${value.toLocaleString("en-IN")}`;
   }
 };
 
 const getStatusConfig = (status) => {
-  const normalized = String(status || "").toLowerCase();
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
 
-  if (["completed", "reconciled", "matched", "success"].includes(normalized)) {
+  if (
+    ["completed", "reconciled", "matched", "success"].includes(normalized)
+  ) {
     return {
       label: "Reconciled",
       icon: CheckCircle2,
       styles: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      description: "Reconciliation completed successfully",
+      description: "Reconciliation completed successfully.",
     };
   }
 
-  if (["in_progress", "in progress", "pending"].includes(normalized)) {
+  if (["in_progress", "pending", "processing"].includes(normalized)) {
     return {
       label: "In Progress",
       icon: Clock,
       styles: "bg-amber-50 text-amber-700 border-amber-200",
-      description: "Some transactions still need review",
+      description: "Some transactions still need review.",
     };
   }
 
-  if (["failed", "error"].includes(normalized)) {
+  if (["failed", "error", "discrepancy"].includes(normalized)) {
     return {
       label: "Needs Attention",
       icon: XCircle,
       styles: "bg-rose-50 text-rose-700 border-rose-200",
-      description: "Review discrepancies before completing",
+      description: "Review discrepancies before completing.",
     };
   }
 
@@ -57,7 +70,7 @@ const getStatusConfig = (status) => {
     label: status || "Not Reconciled",
     icon: AlertTriangle,
     styles: "bg-slate-100 text-slate-700 border-slate-200",
-    description: "Check the reconciliation results",
+    description: "Check the reconciliation results.",
   };
 };
 
@@ -70,20 +83,28 @@ function SummaryCard({
   valueStyles = "text-slate-900",
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className={`mt-3 break-words text-2xl font-bold tracking-tight ${valueStyles}`}>
+
+          <p
+            className={`mt-3 break-words text-2xl font-bold tracking-tight ${valueStyles}`}
+          >
             {value}
           </p>
+
           {subtitle && (
-            <p className="mt-2 text-xs leading-5 text-slate-500">{subtitle}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              {subtitle}
+            </p>
           )}
         </div>
 
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles}`}>
-          <Icon size={21} />
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles}`}
+        >
+          <Icon size={21} aria-hidden="true" />
         </div>
       </div>
     </div>
@@ -104,27 +125,48 @@ export default function ReconciliationSummary({
     totalAppTransactions = 0,
     bankTotal = 0,
     appTotal = 0,
-    difference = 0,
-  } = reconciliation;
+    difference,
+  } = reconciliation || {};
 
-  const statusConfig = getStatusConfig(status);
-  const StatusIcon = statusConfig.icon;
+  const totalMatched = Math.max(0, toNumber(matchedCount));
+  const totalUnmatched = Math.max(0, toNumber(unmatchedCount));
+  const totalBankOnly = Math.max(0, toNumber(bankOnlyCount));
+  const totalAppOnly = Math.max(0, toNumber(appOnlyCount));
 
-  const totalMatched = Number(matchedCount || 0);
-  const totalUnmatched = Number(unmatchedCount || 0);
-  const totalBankOnly = Number(bankOnlyCount || 0);
-  const totalAppOnly = Number(appOnlyCount || 0);
+  const bankTransactionCount = Math.max(
+    0,
+    toNumber(totalBankTransactions)
+  );
+
+  const appTransactionCount = Math.max(
+    0,
+    toNumber(totalAppTransactions)
+  );
+
+  const bankAmount = toNumber(bankTotal);
+  const appAmount = toNumber(appTotal);
+
+  // Use the supplied difference when available; otherwise calculate it.
+  const differenceValue =
+    difference !== undefined && difference !== null
+      ? toNumber(difference)
+      : bankAmount - appAmount;
 
   const totalReviewed =
-    totalMatched + totalUnmatched + totalBankOnly + totalAppOnly;
+    totalMatched +
+    totalUnmatched +
+    totalBankOnly +
+    totalAppOnly;
 
   const matchPercentage =
     totalReviewed > 0
-      ? Math.round((totalMatched / totalReviewed) * 100)
+      ? Math.min(100, Math.round((totalMatched / totalReviewed) * 100))
       : 0;
 
-  const differenceValue = Number(difference || 0);
   const hasDifference = Math.abs(differenceValue) > 0.009;
+
+  const statusConfig = getStatusConfig(status);
+  const StatusIcon = statusConfig.icon;
 
   return (
     <section className="space-y-5">
@@ -140,13 +182,16 @@ export default function ReconciliationSummary({
               <h2 className="text-lg font-bold text-slate-900">
                 Reconciliation Overview
               </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Compare imported bank transactions with your app records.
               </p>
             </div>
           </div>
 
-          <div className={`inline-flex w-fit items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold ${statusConfig.styles}`}>
+          <div
+            className={`inline-flex w-fit items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold ${statusConfig.styles}`}
+          >
             <StatusIcon size={17} />
             {statusConfig.label}
           </div>
@@ -162,6 +207,7 @@ export default function ReconciliationSummary({
               <span className="font-medium text-slate-500">
                 Matched transactions
               </span>
+
               <span className="font-bold text-slate-800">
                 {matchPercentage}%
               </span>
@@ -180,6 +226,10 @@ export default function ReconciliationSummary({
                 style={{ width: `${matchPercentage}%` }}
               />
             </div>
+
+            <p className="mt-2 text-xs text-slate-500">
+              {totalMatched} of {totalReviewed} reviewed transactions matched.
+            </p>
           </div>
         </div>
       </div>
@@ -227,22 +277,25 @@ export default function ReconciliationSummary({
       <div>
         <div className="mb-3 flex items-center gap-2">
           <CircleDollarSign size={20} className="text-blue-700" />
-          <h3 className="font-bold text-slate-900">Amount Comparison</h3>
+
+          <h3 className="font-bold text-slate-900">
+            Amount Comparison
+          </h3>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <SummaryCard
             title="Bank Statement Total"
-            value={formatCurrency(bankTotal, currency)}
-            subtitle={`${Number(totalBankTransactions || 0)} bank transactions`}
+            value={formatCurrency(bankAmount, currency)}
+            subtitle={`${bankTransactionCount} bank transactions`}
             icon={Wallet}
             iconStyles="bg-indigo-50 text-indigo-700"
           />
 
           <SummaryCard
             title="App Transactions Total"
-            value={formatCurrency(appTotal, currency)}
-            subtitle={`${Number(totalAppTransactions || 0)} app transactions`}
+            value={formatCurrency(appAmount, currency)}
+            subtitle={`${appTransactionCount} app transactions`}
             icon={ArrowLeftRight}
             iconStyles="bg-blue-50 text-blue-700"
           />
@@ -271,29 +324,43 @@ export default function ReconciliationSummary({
       </div>
 
       {/* Reconciliation result */}
-      <div className={`flex items-start gap-3 rounded-2xl border p-4 ${
-        hasDifference
-          ? "border-amber-200 bg-amber-50"
-          : "border-emerald-200 bg-emerald-50"
-      }`}>
+      <div
+        className={`flex items-start gap-3 rounded-2xl border p-4 ${
+          hasDifference
+            ? "border-amber-200 bg-amber-50"
+            : "border-emerald-200 bg-emerald-50"
+        }`}
+      >
         {hasDifference ? (
-          <AlertTriangle size={21} className="mt-0.5 shrink-0 text-amber-700" />
+          <AlertTriangle
+            size={21}
+            className="mt-0.5 shrink-0 text-amber-700"
+            aria-hidden="true"
+          />
         ) : (
-          <CheckCircle2 size={21} className="mt-0.5 shrink-0 text-emerald-700" />
+          <CheckCircle2
+            size={21}
+            className="mt-0.5 shrink-0 text-emerald-700"
+            aria-hidden="true"
+          />
         )}
 
         <div>
-          <p className={`font-semibold ${
-            hasDifference ? "text-amber-900" : "text-emerald-900"
-          }`}>
+          <p
+            className={`font-semibold ${
+              hasDifference ? "text-amber-900" : "text-emerald-900"
+            }`}
+          >
             {hasDifference
               ? "Differences detected"
               : "Totals are balanced"}
           </p>
 
-          <p className={`mt-1 text-sm leading-6 ${
-            hasDifference ? "text-amber-800" : "text-emerald-800"
-          }`}>
+          <p
+            className={`mt-1 text-sm leading-6 ${
+              hasDifference ? "text-amber-800" : "text-emerald-800"
+            }`}
+          >
             {hasDifference
               ? "Review unmatched transactions, bank charges, missing entries and date differences before finalizing."
               : "The bank and app totals match. Verify individual transactions before marking the reconciliation complete."}

@@ -115,6 +115,7 @@ function Field({
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const { user, updateUser } = useAuth();
+
   const fileInputRef = useRef(null);
   const objectUrlRef = useRef(null);
 
@@ -124,6 +125,15 @@ export default function ProfileSettings() {
   );
 
   const [avatar, setAvatar] = useState(() => {
+    try {
+      return localStorage.getItem(AVATAR_STORAGE_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [originalAvatar, setOriginalAvatar] = useState(() => {
     try {
       return localStorage.getItem(AVATAR_STORAGE_KEY) || "";
     } catch {
@@ -150,8 +160,8 @@ export default function ProfileSettings() {
     };
   }, []);
 
-  const isDirty =
-    JSON.stringify(form) !== JSON.stringify(originalForm);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(originalForm);
+  const hasAvatarChanged = Boolean(selectedPhoto) || avatar !== originalAvatar;
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -181,6 +191,7 @@ export default function ProfileSettings() {
     }
 
     const digits = form.phone.replace(/\D/g, "");
+
     if (form.phone.trim() && (digits.length < 10 || digits.length > 15)) {
       nextErrors.phone = "Enter a valid phone number.";
     }
@@ -204,32 +215,39 @@ export default function ProfileSettings() {
 
   function handlePhotoChange(event) {
     const file = event.target.files?.[0];
-    event.target.value = "";
 
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
       setPhotoError("Please select an image file.");
+      event.target.value = "";
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
       setPhotoError("Image must be smaller than 2 MB.");
+      event.target.value = "";
       return;
     }
-
-    setPhotoError("");
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
     }
 
-    objectUrlRef.current = URL.createObjectURL(file);
-    setAvatar(objectUrlRef.current);
+    const previewUrl = URL.createObjectURL(file);
+
+    objectUrlRef.current = previewUrl;
+
+    setSelectedPhoto(file);
+    setAvatar(previewUrl);
+    setPhotoError("");
     setStatus({
       type: "info",
-      text: "Photo preview updated. Save it to keep the photo in this browser.",
+      text: "Photo preview updated. Save changes to keep it.",
     });
+
+    // Reset input so the same image can be selected again.
+    event.target.value = "";
   }
 
   function removePhoto() {
@@ -238,28 +256,62 @@ export default function ProfileSettings() {
       objectUrlRef.current = null;
     }
 
+    setSelectedPhoto(null);
     setAvatar("");
     setPhotoError("");
+
     setStatus({
       type: "info",
-      text: "Photo removed from the preview. Save changes to apply it.",
+      text: "Photo removed from preview. Save changes to apply it.",
     });
   }
 
   function handleCancel() {
     setForm(originalForm);
     setErrors({});
+    setPhotoError("");
     setStatus({ type: "", text: "" });
+    setSelectedPhoto(null);
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
     }
 
-    try {
-      setAvatar(localStorage.getItem(AVATAR_STORAGE_KEY) || "");
-    } catch {
-      setAvatar("");
+    setAvatar(originalAvatar);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  async function saveAvatar() {
+    if (selectedPhoto) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Photo could not be read."));
+
+        reader.readAsDataURL(selectedPhoto);
+      });
+
+      localStorage.setItem(AVATAR_STORAGE_KEY, dataUrl);
+      setAvatar(dataUrl);
+      setOriginalAvatar(dataUrl);
+      setSelectedPhoto(null);
+
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+
+      return;
+    }
+
+    if (!avatar) {
+      localStorage.removeItem(AVATAR_STORAGE_KEY);
+      setOriginalAvatar("");
     }
   }
 
@@ -275,6 +327,8 @@ export default function ProfileSettings() {
       return;
     }
 
+    if (!isDirty && !hasAvatarChanged) return;
+
     const payload = {
       name: form.name.trim(),
       email: form.email.trim(),
@@ -286,17 +340,24 @@ export default function ProfileSettings() {
     setSaving(true);
 
     try {
-      // This endpoint must exist in your backend auth routes.
-      const response = await api.patch(
-        PROFILE_UPDATE_ENDPOINT,
-        payload
-      );
+      let updatedUser = user || payload;
 
-      const updatedUser =
-        response?.data?.user ||
-        response?.data?.data?.user ||
-        response?.data?.data ||
-        payload;
+      if (isDirty) {
+        const response = await api.patch(
+          PROFILE_UPDATE_ENDPOINT,
+          payload
+        );
+
+        updatedUser =
+          response?.data?.user ||
+          response?.data?.data?.user ||
+          response?.data?.data ||
+          payload;
+
+        if (typeof updateUser === "function") {
+          updateUser(updatedUser);
+        }
+      }
 
       const nextProfile = {
         ...payload,
@@ -312,42 +373,19 @@ export default function ProfileSettings() {
           : payload.dateOfBirth || "",
       };
 
-      if (typeof updateUser === "function") {
-        updateUser(updatedUser);
-      }
+      setForm(nextProfile);
+      setOriginalForm(nextProfile);
 
       try {
-        if (avatar && objectUrlRef.current) {
-          const file = fileInputRef.current?.files?.[0];
-
-          if (file) {
-            const dataUrl = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = () => reject(new Error("Photo could not be read."));
-              reader.readAsDataURL(file);
-            });
-
-            localStorage.setItem(AVATAR_STORAGE_KEY, dataUrl);
-            setAvatar(dataUrl);
-            URL.revokeObjectURL(objectUrlRef.current);
-            objectUrlRef.current = null;
-          }
-        } else if (!avatar) {
-          localStorage.removeItem(AVATAR_STORAGE_KEY);
-        }
+        await saveAvatar();
       } catch {
         setStatus({
           type: "error",
           text: "Profile was saved, but the photo could not be saved in this browser.",
         });
-        setForm(nextProfile);
-        setOriginalForm(nextProfile);
         return;
       }
 
-      setForm(nextProfile);
-      setOriginalForm(nextProfile);
       setStatus({
         type: "success",
         text: "Your profile has been updated successfully.",
@@ -384,9 +422,11 @@ export default function ProfileSettings() {
           <p className="mb-2 text-sm font-medium text-blue-700">
             Settings / Profile
           </p>
+
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Profile settings
           </h1>
+
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
             Manage your personal information and keep your account details up
             to date.
@@ -394,7 +434,6 @@ export default function ProfileSettings() {
         </header>
 
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-          {/* Profile summary */}
           <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="h-24 bg-gradient-to-r from-[#03045E] via-[#0D21A1] to-[#2563EB]" />
 
@@ -421,6 +460,7 @@ export default function ProfileSettings() {
               <h2 className="mt-4 break-words text-lg font-bold">
                 {form.name || "Your name"}
               </h2>
+
               <p className="mt-1 break-all text-sm text-slate-500">
                 {form.email || "Add your email address"}
               </p>
@@ -443,6 +483,7 @@ export default function ProfileSettings() {
                 <p className="text-sm font-semibold text-blue-900">
                   Keep your profile updated
                 </p>
+
                 <p className="mt-1 text-xs leading-5 text-blue-800">
                   Accurate details help you manage your account more easily.
                 </p>
@@ -450,7 +491,6 @@ export default function ProfileSettings() {
             </div>
           </aside>
 
-          {/* Editable form */}
           <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-5 sm:px-7">
               <h2 className="text-lg font-bold">Personal information</h2>
@@ -478,6 +518,7 @@ export default function ProfileSettings() {
                     ) : (
                       <AlertCircle size={18} className="mt-0.5 shrink-0" />
                     )}
+
                     <span>{status.text}</span>
                   </div>
                 )}
@@ -499,6 +540,7 @@ export default function ProfileSettings() {
                     <p className="font-semibold text-slate-800">
                       Profile photo
                     </p>
+
                     <p className="mt-1 text-xs leading-5 text-slate-500">
                       JPG, PNG, or another image format. Maximum size 2 MB.
                     </p>
@@ -616,7 +658,7 @@ export default function ProfileSettings() {
                 <button
                   type="button"
                   onClick={handleCancel}
-                  disabled={saving || !isDirty}
+                  disabled={saving || (!isDirty && !hasAvatarChanged)}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <RotateCcw size={16} />
@@ -625,7 +667,7 @@ export default function ProfileSettings() {
 
                 <button
                   type="submit"
-                  disabled={saving || (!isDirty && !objectUrlRef.current)}
+                  disabled={saving || (!isDirty && !hasAvatarChanged)}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E] focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? (
@@ -633,6 +675,7 @@ export default function ProfileSettings() {
                   ) : (
                     <Save size={17} />
                   )}
+
                   {saving ? "Saving..." : "Save changes"}
                 </button>
               </div>

@@ -1,3 +1,4 @@
+
 import { useMemo, useState } from "react";
 import {
   FileSpreadsheet,
@@ -6,28 +7,37 @@ import {
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
-  AlertCircle,
   ReceiptText,
   Wallet,
   X,
 } from "lucide-react";
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
 const formatCurrency = (amount, currency = "INR") => {
+  const value = toNumber(amount);
+
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(value);
   } catch {
-    return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+    return `₹${value.toLocaleString("en-IN")}`;
   }
 };
 
 const formatDate = (date) => {
   if (!date) return "—";
 
-  const parsedDate = new Date(date);
+  const value = String(date);
+  const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(date);
 
   if (Number.isNaN(parsedDate.getTime())) return "—";
 
@@ -38,27 +48,35 @@ const formatDate = (date) => {
   });
 };
 
-const getTransactionType = (transaction) => {
+const getTransactionType = (transaction = {}) => {
   const rawType = String(
     transaction.type ||
       transaction.transactionType ||
       transaction.direction ||
       ""
-  ).toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
 
-  if (["credit", "income", "deposit"].includes(rawType)) {
+  if (["credit", "income", "deposit", "cr"].includes(rawType)) {
     return "credit";
   }
 
-  if (["debit", "expense", "withdrawal", "payment"].includes(rawType)) {
+  if (
+    ["debit", "expense", "withdrawal", "payment", "dr"].includes(rawType)
+  ) {
     return "debit";
   }
 
-  if (Number(transaction.credit || transaction.creditAmount || 0) > 0) {
+  if (
+    toNumber(transaction.credit ?? transaction.creditAmount) > 0
+  ) {
     return "credit";
   }
 
-  if (Number(transaction.debit || transaction.debitAmount || 0) > 0) {
+  if (
+    toNumber(transaction.debit ?? transaction.debitAmount) > 0
+  ) {
     return "debit";
   }
 
@@ -68,28 +86,45 @@ const getTransactionType = (transaction) => {
 const getAmount = (transaction, type) => {
   if (type === "credit") {
     return Math.abs(
-      Number(
-        transaction.credit ||
-          transaction.creditAmount ||
-          transaction.amount ||
-          0
+      toNumber(
+        transaction.credit ??
+          transaction.creditAmount ??
+          transaction.amount
       )
     );
   }
 
   if (type === "debit") {
     return Math.abs(
-      Number(
-        transaction.debit ||
-          transaction.debitAmount ||
-          transaction.amount ||
-          0
+      toNumber(
+        transaction.debit ??
+          transaction.debitAmount ??
+          transaction.amount
       )
     );
   }
 
-  return Math.abs(Number(transaction.amount || 0));
+  return Math.abs(toNumber(transaction.amount));
 };
+
+const getDescription = (transaction) =>
+  transaction.description ||
+  transaction.narration ||
+  transaction.particulars ||
+  transaction.merchant ||
+  "Bank transaction";
+
+const getReference = (transaction) =>
+  transaction.referenceNumber ||
+  transaction.reference ||
+  transaction.refNo ||
+  "—";
+
+const getTransactionDate = (transaction) =>
+  transaction.date ||
+  transaction.transactionDate ||
+  transaction.valueDate ||
+  transaction.createdAt;
 
 export default function StatementPreview({
   transactions = [],
@@ -105,7 +140,10 @@ export default function StatementPreview({
   const [typeFilter, setTypeFilter] = useState("all");
 
   const validTransactions = Array.isArray(transactions)
-    ? transactions
+    ? transactions.filter(
+        (transaction) =>
+          transaction && typeof transaction === "object"
+      )
     : [];
 
   const summary = useMemo(() => {
@@ -140,21 +178,8 @@ export default function StatementPreview({
     const query = search.trim().toLowerCase();
 
     return validTransactions.filter((transaction) => {
-      const description = String(
-        transaction.description ||
-          transaction.narration ||
-          transaction.particulars ||
-          transaction.merchant ||
-          ""
-      ).toLowerCase();
-
-      const reference = String(
-        transaction.referenceNumber ||
-          transaction.reference ||
-          transaction.refNo ||
-          ""
-      ).toLowerCase();
-
+      const description = getDescription(transaction).toLowerCase();
+      const reference = getReference(transaction).toLowerCase();
       const type = getTransactionType(transaction);
 
       const matchesSearch =
@@ -169,16 +194,26 @@ export default function StatementPreview({
     });
   }, [validTransactions, search, typeFilter]);
 
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+  };
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-7 w-48 rounded bg-slate-100" />
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[1, 2, 3].map((item) => (
-              <div key={item} className="h-24 rounded-xl bg-slate-100" />
+              <div
+                key={item}
+                className="h-24 rounded-xl bg-slate-100"
+              />
             ))}
           </div>
+
           {[1, 2, 3, 4].map((item) => (
             <div key={item} className="h-12 rounded bg-slate-50" />
           ))}
@@ -207,7 +242,12 @@ export default function StatementPreview({
 
             {(bankName || accountNumber) && (
               <p className="mt-1 text-xs text-slate-400">
-                {[bankName, accountNumber ? `•••• ${String(accountNumber).slice(-4)}` : ""]
+                {[
+                  bankName,
+                  accountNumber
+                    ? `•••• ${String(accountNumber).slice(-4)}`
+                    : "",
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
@@ -284,6 +324,7 @@ export default function StatementPreview({
             <option value="all">All transaction types</option>
             <option value="credit">Credits only</option>
             <option value="debit">Debits only</option>
+            <option value="unknown">Unknown type</option>
           </select>
         </div>
       </div>
@@ -304,6 +345,16 @@ export default function StatementPreview({
               ? "Upload a statement containing transaction rows to preview it here."
               : "Try changing your search or transaction type filter."}
           </p>
+
+          {(search || typeFilter !== "all") && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-4 rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -335,56 +386,27 @@ export default function StatementPreview({
                   const type = getTransactionType(transaction);
                   const amount = getAmount(transaction, type);
 
-                  const description =
-                    transaction.description ||
-                    transaction.narration ||
-                    transaction.particulars ||
-                    transaction.merchant ||
-                    "Bank transaction";
-
-                  const reference =
-                    transaction.referenceNumber ||
-                    transaction.reference ||
-                    transaction.refNo ||
-                    "—";
-
                   return (
                     <tr
-                      key={transaction.id ?? transaction._id ?? index}
+                      key={
+                        transaction.id ??
+                        transaction._id ??
+                        `transaction-${index}`
+                      }
                       className="transition hover:bg-slate-50/80"
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                              type === "credit"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : type === "debit"
-                                  ? "bg-rose-50 text-rose-700"
-                                  : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {type === "credit" ? (
-                              <ArrowDownLeft size={19} />
-                            ) : type === "debit" ? (
-                              <ArrowUpRight size={19} />
-                            ) : (
-                              <Wallet size={19} />
-                            )}
-                          </div>
+                          <TransactionIcon type={type} />
 
                           <p className="max-w-[260px] truncate text-sm font-semibold text-slate-800">
-                            {description}
+                            {getDescription(transaction)}
                           </p>
                         </div>
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          transaction.date ||
-                            transaction.transactionDate ||
-                            transaction.valueDate
-                        )}
+                        {formatDate(getTransactionDate(transaction))}
                       </td>
 
                       <td className="px-5 py-4">
@@ -392,22 +414,15 @@ export default function StatementPreview({
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-right">
-                        <span
-                          className={`text-sm font-bold ${
-                            type === "credit"
-                              ? "text-emerald-700"
-                              : type === "debit"
-                                ? "text-rose-700"
-                                : "text-slate-700"
-                          }`}
-                        >
-                          {type === "credit" ? "+" : type === "debit" ? "−" : ""}
-                          {formatCurrency(amount, currency)}
-                        </span>
+                        <AmountDisplay
+                          amount={amount}
+                          type={type}
+                          currency={currency}
+                        />
                       </td>
 
-                      <td className="px-5 py-4 text-sm text-slate-500">
-                        {reference}
+                      <td className="break-all px-5 py-4 text-sm text-slate-500">
+                        {getReference(transaction)}
                       </td>
                     </tr>
                   );
@@ -424,70 +439,40 @@ export default function StatementPreview({
 
               return (
                 <div
-                  key={transaction.id ?? transaction._id ?? index}
+                  key={
+                    transaction.id ??
+                    transaction._id ??
+                    `transaction-${index}`
+                  }
                   className="p-4"
                 >
                   <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                        type === "credit"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : type === "debit"
-                            ? "bg-rose-50 text-rose-700"
-                            : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {type === "credit" ? (
-                        <ArrowDownLeft size={19} />
-                      ) : type === "debit" ? (
-                        <ArrowUpRight size={19} />
-                      ) : (
-                        <Wallet size={19} />
-                      )}
-                    </div>
+                    <TransactionIcon type={type} />
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <p className="break-words text-sm font-semibold text-slate-800">
-                          {transaction.description ||
-                            transaction.narration ||
-                            transaction.particulars ||
-                            transaction.merchant ||
-                            "Bank transaction"}
+                          {getDescription(transaction)}
                         </p>
 
-                        <p
-                          className={`shrink-0 text-sm font-bold ${
-                            type === "credit"
-                              ? "text-emerald-700"
-                              : type === "debit"
-                                ? "text-rose-700"
-                                : "text-slate-700"
-                          }`}
-                        >
-                          {type === "credit" ? "+" : type === "debit" ? "−" : ""}
-                          {formatCurrency(amount, currency)}
-                        </p>
+                        <AmountDisplay
+                          amount={amount}
+                          type={type}
+                          currency={currency}
+                        />
                       </div>
 
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <TypeBadge type={type} />
+
                         <span className="inline-flex items-center gap-1 text-xs text-slate-400">
                           <CalendarDays size={12} />
-                          {formatDate(
-                            transaction.date ||
-                              transaction.transactionDate ||
-                              transaction.valueDate
-                          )}
+                          {formatDate(getTransactionDate(transaction))}
                         </span>
                       </div>
 
                       <p className="mt-2 break-all text-xs text-slate-400">
-                        Ref:{" "}
-                        {transaction.referenceNumber ||
-                          transaction.reference ||
-                          transaction.refNo ||
-                          "—"}
+                        Ref: {getReference(transaction)}
                       </p>
                     </div>
                   </div>
@@ -504,6 +489,7 @@ export default function StatementPreview({
           <p className="text-sm font-semibold text-slate-700">
             Showing {filteredTransactions.length} of {summary.total} transactions
           </p>
+
           <p className="mt-1 text-xs text-slate-500">
             Review the preview before importing statement transactions.
           </p>
@@ -525,6 +511,45 @@ export default function StatementPreview({
   );
 }
 
+function TransactionIcon({ type }) {
+  const styles =
+    type === "credit"
+      ? "bg-emerald-50 text-emerald-700"
+      : type === "debit"
+        ? "bg-rose-50 text-rose-700"
+        : "bg-slate-100 text-slate-500";
+
+  return (
+    <div
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${styles}`}
+    >
+      {type === "credit" ? (
+        <ArrowDownLeft size={19} />
+      ) : type === "debit" ? (
+        <ArrowUpRight size={19} />
+      ) : (
+        <Wallet size={19} />
+      )}
+    </div>
+  );
+}
+
+function AmountDisplay({ amount, type, currency }) {
+  const styles =
+    type === "credit"
+      ? "text-emerald-700"
+      : type === "debit"
+        ? "text-rose-700"
+        : "text-slate-700";
+
+  return (
+    <span className={`shrink-0 text-sm font-bold ${styles}`}>
+      {type === "credit" ? "+" : type === "debit" ? "−" : ""}
+      {formatCurrency(amount, currency)}
+    </span>
+  );
+}
+
 function SummaryCard({
   title,
   value,
@@ -538,13 +563,17 @@ function SummaryCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">{title}</p>
+
           <p className={`mt-2 break-words text-xl font-bold ${valueStyles}`}>
             {value}
           </p>
+
           <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
         </div>
 
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconStyles}`}>
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconStyles}`}
+        >
           <Icon size={20} />
         </div>
       </div>
@@ -571,7 +600,9 @@ function TypeBadge({ type }) {
   const item = config[type] || config.unknown;
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${item.styles}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${item.styles}`}
+    >
       {item.label}
     </span>
   );

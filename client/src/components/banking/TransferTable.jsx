@@ -1,3 +1,4 @@
+
 import { useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -9,19 +10,84 @@ import {
   Eye,
   ChevronDown,
   ArrowUpDown,
-  ArrowDown,
-  ArrowUp,
   RefreshCw,
   Wallet,
   X,
 } from "lucide-react";
 
 const STATUS_STYLES = {
-  Completed: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-  Pending: "bg-amber-50 text-amber-700 ring-amber-600/20",
-  Failed: "bg-red-50 text-red-700 ring-red-600/20",
-  Cancelled: "bg-slate-100 text-slate-600 ring-slate-500/20",
+  completed: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  pending: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  failed: "bg-red-50 text-red-700 ring-red-600/20",
+  cancelled: "bg-slate-100 text-slate-600 ring-slate-500/20",
 };
+
+const getId = (item) => item?.id ?? item?._id ?? "";
+
+const getDateValue = (date) => {
+  if (!date) return 0;
+
+  const value = String(date);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(date);
+
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
+const getDateOnly = (date) => {
+  if (!date) return "";
+  return String(date).slice(0, 10);
+};
+
+const getStatus = (transfer) =>
+  String(transfer?.status || "Completed").trim();
+
+const getMethod = (transfer) =>
+  transfer?.transferMethod || transfer?.method || "—";
+
+const getTransferDate = (transfer) =>
+  transfer?.transferDate || transfer?.date || transfer?.createdAt;
+
+const getAmount = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const formatCurrency = (amount, currency = "INR") => {
+  const value = getAmount(amount);
+
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `₹${value.toLocaleString("en-IN")}`;
+  }
+};
+
+const formatDate = (date) => {
+  if (!date) return "—";
+
+  const value = String(date);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "—";
+
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getReference = (transfer, index) =>
+  transfer?.referenceNumber ||
+  `TRF-${String(getId(transfer) || index + 1).padStart(4, "0")}`;
 
 export default function TransferTable({
   transfers = [],
@@ -39,21 +105,29 @@ export default function TransferTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const safeTransfers = Array.isArray(transfers)
+    ? transfers.filter((item) => item && typeof item === "object")
+    : [];
+
+  const safeAccounts = Array.isArray(accounts)
+    ? accounts.filter((item) => item && typeof item === "object")
+    : [];
+
   const getAccountName = (transfer, type) => {
     const id =
       type === "from"
-        ? transfer.fromAccountId
-        : transfer.toAccountId;
+        ? transfer?.fromAccountId
+        : transfer?.toAccountId;
 
     const savedName =
       type === "from"
-        ? transfer.fromAccountName
-        : transfer.toAccountName;
+        ? transfer?.fromAccountName
+        : transfer?.toAccountName;
 
     if (savedName) return savedName;
 
-    const account = accounts.find(
-      (item) => String(item.id) === String(id)
+    const account = safeAccounts.find(
+      (item) => String(getId(item)) === String(id)
     );
 
     return (
@@ -63,53 +137,29 @@ export default function TransferTable({
     );
   };
 
-  const formatCurrency = (amount, currency = "INR") => {
-    try {
-      return new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(Number(amount || 0));
-    } catch {
-      return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
-    }
-  };
-
-  const formatDate = (date) => {
-    if (!date) return "—";
-
-    const parsed = new Date(date);
-
-    if (Number.isNaN(parsed.getTime())) return "—";
-
-    return parsed.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const methods = useMemo(() => {
-    return [
+  const methods = useMemo(
+    () => [
       ...new Set(
-        transfers
+        safeTransfers
           .map((item) => item.transferMethod || item.method)
           .filter(Boolean)
       ),
-    ];
-  }, [transfers]);
+    ],
+    [safeTransfers]
+  );
 
   const filteredTransfers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    const result = transfers.filter((transfer) => {
+    const result = safeTransfers.filter((transfer) => {
       const fromName = getAccountName(transfer, "from");
       const toName = getAccountName(transfer, "to");
-      const method = transfer.transferMethod || transfer.method || "";
-      const status = transfer.status || "Completed";
+      const method = getMethod(transfer);
+      const status = getStatus(transfer);
+      const dateOnly = getDateOnly(getTransferDate(transfer));
 
       const searchableText = [
-        transfer.id,
+        getId(transfer),
         transfer.referenceNumber,
         transfer.notes,
         fromName,
@@ -122,14 +172,16 @@ export default function TransferTable({
         .join(" ")
         .toLowerCase();
 
-      const transferDate = transfer.transferDate || transfer.date || "";
-      const dateOnly = String(transferDate).slice(0, 10);
+      const matchesSearch =
+        !query || searchableText.includes(query);
 
-      const matchesSearch = !query || searchableText.includes(query);
       const matchesStatus =
-        statusFilter === "All" || status === statusFilter;
+        statusFilter === "All" ||
+        status.toLowerCase() === statusFilter.toLowerCase();
+
       const matchesMethod =
         methodFilter === "All" || method === methodFilter;
+
       const matchesFrom = !dateFrom || dateOnly >= dateFrom;
       const matchesTo = !dateTo || dateOnly <= dateTo;
 
@@ -143,22 +195,24 @@ export default function TransferTable({
     });
 
     return result.sort((a, b) => {
-      const dateA = new Date(a.transferDate || a.date || 0).getTime();
-      const dateB = new Date(b.transferDate || b.date || 0).getTime();
+      const dateA = getDateValue(getTransferDate(a));
+      const dateB = getDateValue(getTransferDate(b));
 
       if (sortOrder === "oldest") return dateA - dateB;
+
       if (sortOrder === "amountHigh") {
-        return Number(b.amount || 0) - Number(a.amount || 0);
+        return getAmount(b.amount) - getAmount(a.amount);
       }
+
       if (sortOrder === "amountLow") {
-        return Number(a.amount || 0) - Number(b.amount || 0);
+        return getAmount(a.amount) - getAmount(b.amount);
       }
 
       return dateB - dateA;
     });
   }, [
-    transfers,
-    accounts,
+    safeTransfers,
+    safeAccounts,
     search,
     statusFilter,
     methodFilter,
@@ -179,13 +233,16 @@ export default function TransferTable({
     currentPage * pageSize
   );
 
-  const completedCount = filteredTransfers.filter(
-    (item) => (item.status || "Completed") === "Completed"
-  ).length;
+  const completedTransfers = filteredTransfers.filter(
+    (item) => getStatus(item).toLowerCase() === "completed"
+  );
 
-  const totalAmount = filteredTransfers
-    .filter((item) => (item.status || "Completed") === "Completed")
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const completedCount = completedTransfers.length;
+
+  const totalAmount = completedTransfers.reduce(
+    (sum, item) => sum + getAmount(item.amount),
+    0
+  );
 
   const resetFilters = () => {
     setSearch("");
@@ -203,54 +260,32 @@ export default function TransferTable({
   };
 
   const hasFilters =
-    search ||
+    Boolean(search) ||
     statusFilter !== "All" ||
     methodFilter !== "All" ||
-    dateFrom ||
-    dateTo ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
     sortOrder !== "newest";
 
   return (
     <div className="space-y-5">
       {/* Summary */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                Matching Transfers
-              </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {filteredTransfers.length}
-              </p>
-            </div>
+        <SummaryCard
+          title="Matching Transfers"
+          value={filteredTransfers.length}
+          icon={ArrowLeftRight}
+          iconStyles="bg-blue-50 text-blue-700"
+          subtitle="Transfers matching current filters"
+        />
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-              <ArrowLeftRight size={22} />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                Completed Transfer Amount
-              </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {formatCurrency(totalAmount)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {completedCount} completed transfer
-                {completedCount !== 1 ? "s" : ""}
-              </p>
-            </div>
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-              <Wallet size={22} />
-            </div>
-          </div>
-        </div>
+        <SummaryCard
+          title="Completed Transfer Amount"
+          value={formatCurrency(totalAmount)}
+          icon={Wallet}
+          iconStyles="bg-emerald-50 text-emerald-700"
+          subtitle={`${completedCount} completed transfer${completedCount !== 1 ? "s" : ""}`}
+        />
       </div>
 
       {/* Table container */}
@@ -298,6 +333,7 @@ export default function TransferTable({
                   updateFilter(setSearch, event.target.value)
                 }
                 placeholder="Search account, reference, method..."
+                aria-label="Search transfers"
                 className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
@@ -313,6 +349,7 @@ export default function TransferTable({
                 onChange={(event) =>
                   updateFilter(setStatusFilter, event.target.value)
                 }
+                aria-label="Filter by status"
                 className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-9 text-sm outline-none focus:border-blue-500"
               >
                 <option value="All">All statuses</option>
@@ -339,6 +376,7 @@ export default function TransferTable({
                 onChange={(event) =>
                   updateFilter(setMethodFilter, event.target.value)
                 }
+                aria-label="Filter by transfer method"
                 className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-9 text-sm outline-none focus:border-blue-500"
               >
                 <option value="All">All methods</option>
@@ -362,6 +400,7 @@ export default function TransferTable({
                 <CalendarDays size={13} className="mr-1 inline" />
                 From date
               </label>
+
               <input
                 type="date"
                 value={dateFrom}
@@ -378,6 +417,7 @@ export default function TransferTable({
                 <CalendarDays size={13} className="mr-1 inline" />
                 To date
               </label>
+
               <input
                 type="date"
                 value={dateTo}
@@ -393,6 +433,7 @@ export default function TransferTable({
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                 Sort by
               </label>
+
               <select
                 value={sortOrder}
                 onChange={(event) =>
@@ -431,7 +472,6 @@ export default function TransferTable({
             </p>
           </div>
         ) : paginatedTransfers.length === 0 ? (
-          /* Empty state */
           <div className="flex flex-col items-center justify-center px-5 py-16 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
               <ArrowLeftRight size={29} />
@@ -442,7 +482,7 @@ export default function TransferTable({
             </h3>
 
             <p className="mt-1 max-w-sm text-sm leading-6 text-slate-500">
-              {transfers.length === 0
+              {safeTransfers.length === 0
                 ? "Your transfer history will appear here once you record a transfer."
                 : "Try changing your search or filters to see matching transfers."}
             </p>
@@ -476,184 +516,30 @@ export default function TransferTable({
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedTransfers.map((transfer, index) => {
-                    const status = transfer.status || "Completed";
-                    const method =
-                      transfer.transferMethod || transfer.method || "—";
-                    const date =
-                      transfer.transferDate || transfer.date;
-
-                    return (
-                      <tr
-                        key={transfer.id ?? `${date}-${index}`}
-                        className="transition hover:bg-slate-50/70"
-                      >
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                              <ArrowLeftRight size={18} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                Transfer
-                              </p>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {transfer.referenceNumber ||
-                                  `TRF-${String(transfer.id ?? index + 1).padStart(4, "0")}`}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2.5">
-                            <ArrowUpRight
-                              size={17}
-                              className="shrink-0 text-rose-500"
-                            />
-                            <span className="max-w-[160px] truncate text-sm font-medium text-slate-700">
-                              {getAccountName(transfer, "from")}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2.5">
-                            <ArrowDownLeft
-                              size={17}
-                              className="shrink-0 text-emerald-600"
-                            />
-                            <span className="max-w-[160px] truncate text-sm font-medium text-slate-700">
-                              {getAccountName(transfer, "to")}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-6 py-4">
-                          <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600">
-                            {method}
-                          </span>
-                        </td>
-
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
-                          {formatDate(date)}
-                        </td>
-
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-slate-900">
-                          {formatCurrency(
-                            transfer.amount,
-                            transfer.currency || "INR"
-                          )}
-                        </td>
-
-                        <td className="px-6 py-4">
-                          <StatusBadge status={status} />
-                        </td>
-
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onView?.(transfer)}
-                            disabled={!onView}
-                            title="View transfer"
-                            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-default disabled:opacity-50"
-                          >
-                            <Eye size={15} />
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {paginatedTransfers.map((transfer, index) => (
+                    <TransferRow
+                      key={getId(transfer) || `${getTransferDate(transfer)}-${index}`}
+                      transfer={transfer}
+                      index={index}
+                      getAccountName={getAccountName}
+                      onView={onView}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile and tablet cards */}
             <div className="grid grid-cols-1 gap-3 p-4 sm:p-5 lg:hidden">
-              {paginatedTransfers.map((transfer, index) => {
-                const status = transfer.status || "Completed";
-                const date =
-                  transfer.transferDate || transfer.date;
-                const method =
-                  transfer.transferMethod || transfer.method || "—";
-
-                return (
-                  <article
-                    key={transfer.id ?? `${date}-${index}`}
-                    className="rounded-xl border border-slate-200 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                          <ArrowLeftRight size={19} />
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-slate-900">
-                            {transfer.referenceNumber ||
-                              `TRF-${String(transfer.id ?? index + 1).padStart(4, "0")}`}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {formatDate(date)} · {method}
-                          </p>
-                        </div>
-                      </div>
-
-                      <StatusBadge status={status} />
-                    </div>
-
-                    <div className="my-4 space-y-3 rounded-xl bg-slate-50 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="flex items-center gap-2 text-xs text-slate-500">
-                          <ArrowUpRight size={15} className="text-rose-500" />
-                          From
-                        </span>
-                        <span className="max-w-[65%] truncate text-right text-sm font-medium text-slate-800">
-                          {getAccountName(transfer, "from")}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="flex items-center gap-2 text-xs text-slate-500">
-                          <ArrowDownLeft
-                            size={15}
-                            className="text-emerald-600"
-                          />
-                          To
-                        </span>
-                        <span className="max-w-[65%] truncate text-right text-sm font-medium text-slate-800">
-                          {getAccountName(transfer, "to")}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-slate-500">
-                          Transfer amount
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-slate-900">
-                          {formatCurrency(
-                            transfer.amount,
-                            transfer.currency || "INR"
-                          )}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => onView?.(transfer)}
-                        disabled={!onView}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
-                      >
-                        <Eye size={15} />
-                        View details
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+              {paginatedTransfers.map((transfer, index) => (
+                <TransferMobileCard
+                  key={getId(transfer) || `${getTransferDate(transfer)}-${index}`}
+                  transfer={transfer}
+                  index={index}
+                  getAccountName={getAccountName}
+                  onView={onView}
+                />
+              ))}
             </div>
 
             {/* Pagination */}
@@ -681,15 +567,20 @@ export default function TransferTable({
                     ? 0
                     : (currentPage - 1) * pageSize + 1}
                   {"–"}
-                  {Math.min(currentPage * pageSize, filteredTransfers.length)}
-                  {" "}of {filteredTransfers.length}
+                  {Math.min(
+                    currentPage * pageSize,
+                    filteredTransfers.length
+                  )}{" "}
+                  of {filteredTransfers.length}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  onClick={() =>
+                    setPage((current) => Math.max(1, current - 1))
+                  }
                   disabled={currentPage === 1}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -703,7 +594,9 @@ export default function TransferTable({
                 <button
                   type="button"
                   onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
+                    setPage((current) =>
+                      Math.min(totalPages, current + 1)
+                    )
                   }
                   disabled={currentPage === totalPages}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -719,9 +612,192 @@ export default function TransferTable({
   );
 }
 
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  iconStyles,
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <p className="mt-2 break-words text-2xl font-bold text-slate-900">
+            {value}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+        </div>
+
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles}`}>
+          <Icon size={22} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TransferRow({
+  transfer,
+  index,
+  getAccountName,
+  onView,
+}) {
+  const status = getStatus(transfer);
+  const method = getMethod(transfer);
+  const date = getTransferDate(transfer);
+
+  return (
+    <tr className="transition hover:bg-slate-50/70">
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <ArrowLeftRight size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Transfer
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {getReference(transfer, index)}
+            </p>
+          </div>
+        </div>
+      </td>
+
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2.5">
+          <ArrowUpRight size={17} className="shrink-0 text-rose-500" />
+          <span className="max-w-[160px] truncate text-sm font-medium text-slate-700">
+            {getAccountName(transfer, "from")}
+          </span>
+        </div>
+      </td>
+
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2.5">
+          <ArrowDownLeft size={17} className="shrink-0 text-emerald-600" />
+          <span className="max-w-[160px] truncate text-sm font-medium text-slate-700">
+            {getAccountName(transfer, "to")}
+          </span>
+        </div>
+      </td>
+
+      <td className="px-6 py-4">
+        <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600">
+          {method}
+        </span>
+      </td>
+
+      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
+        {formatDate(date)}
+      </td>
+
+      <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-slate-900">
+        {formatCurrency(transfer.amount, transfer.currency || "INR")}
+      </td>
+
+      <td className="px-6 py-4">
+        <StatusBadge status={status} />
+      </td>
+
+      <td className="px-6 py-4 text-right">
+        <button
+          type="button"
+          onClick={() => onView?.(transfer)}
+          disabled={!onView}
+          title="View transfer"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-default disabled:opacity-50"
+        >
+          <Eye size={15} />
+          View
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function TransferMobileCard({
+  transfer,
+  index,
+  getAccountName,
+  onView,
+}) {
+  const status = getStatus(transfer);
+  const date = getTransferDate(transfer);
+  const method = getMethod(transfer);
+
+  return (
+    <article className="rounded-xl border border-slate-200 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <ArrowLeftRight size={19} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">
+              {getReference(transfer, index)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {formatDate(date)} · {method}
+            </p>
+          </div>
+        </div>
+
+        <StatusBadge status={status} />
+      </div>
+
+      <div className="my-4 space-y-3 rounded-xl bg-slate-50 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-xs text-slate-500">
+            <ArrowUpRight size={15} className="text-rose-500" />
+            From
+          </span>
+          <span className="max-w-[65%] truncate text-right text-sm font-medium text-slate-800">
+            {getAccountName(transfer, "from")}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-xs text-slate-500">
+            <ArrowDownLeft size={15} className="text-emerald-600" />
+            To
+          </span>
+          <span className="max-w-[65%] truncate text-right text-sm font-medium text-slate-800">
+            {getAccountName(transfer, "to")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs text-slate-500">Transfer amount</p>
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {formatCurrency(transfer.amount, transfer.currency || "INR")}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onView?.(transfer)}
+          disabled={!onView}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+        >
+          <Eye size={15} />
+          View details
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function StatusBadge({ status }) {
+  const normalized = String(status || "Unknown").toLowerCase();
+
   const style =
-    STATUS_STYLES[status] ||
+    STATUS_STYLES[normalized] ||
     "bg-slate-100 text-slate-600 ring-slate-500/20";
 
   return (

@@ -11,7 +11,11 @@ import {
   Settings,
   LockKeyhole,
   CircleUserRound,
+  ChevronDown,
+  ChevronUp,
+  ReceiptText,
 } from "lucide-react";
+
 import { useAuth } from "../context/Authcontext";
 
 export default function Profile() {
@@ -44,10 +48,11 @@ export default function Profile() {
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <div className="mx-auto max-w-5xl">
-        {/* Page heading */}
-        <header className="mb-8">
-          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-blue-600">
+      <div className="mx-auto max-w-5xl space-y-6">
+
+        {/* Page Heading */}
+        <header>
+          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-blue-700">
             Account Management
           </p>
 
@@ -60,14 +65,17 @@ export default function Profile() {
           </p>
         </header>
 
-        {/* Profile banner */}
+        {/* Profile Banner */}
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="h-32 bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 sm:h-40" />
+          <div className="relative h-32 overflow-hidden bg-gradient-to-r from-[#03045E] via-[#023E8A] to-[#2563EB] sm:h-40">
+            <div className="absolute -right-10 -top-16 h-48 w-48 rounded-full border-[25px] border-white/10" />
+            <div className="absolute -bottom-24 right-32 h-48 w-48 rounded-full bg-white/5" />
+          </div>
 
           <div className="px-5 pb-6 sm:px-8">
             <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-end gap-4">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border-4 border-white bg-blue-50 text-2xl font-extrabold text-blue-700 shadow-sm sm:h-28 sm:w-28 sm:text-3xl">
+              <div className="flex min-w-0 items-end gap-4">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border-4 border-white bg-blue-50 text-2xl font-extrabold text-blue-800 shadow-sm sm:h-28 sm:w-28 sm:text-3xl">
                   {initials || <CircleUserRound size={40} />}
                 </div>
 
@@ -84,14 +92,14 @@ export default function Profile() {
 
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
                 <ShieldCheck size={15} />
-                Account
+                Account Active
               </span>
             </div>
           </div>
         </section>
 
-        {/* Account information */}
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        {/* Personal Information */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <button
             type="button"
             onClick={() => setShowAccountInfo((previous) => !previous)}
@@ -102,12 +110,21 @@ export default function Profile() {
               <h2 className="text-lg font-bold text-slate-900">
                 Personal Information
               </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Your account details
               </p>
             </div>
 
-            <UserRound size={21} className="shrink-0 text-blue-600" />
+            <div className="flex items-center gap-2 text-blue-700">
+              <UserRound size={21} />
+
+              {showAccountInfo ? (
+                <ChevronUp size={18} />
+              ) : (
+                <ChevronDown size={18} />
+              )}
+            </div>
           </button>
 
           {showAccountInfo && (
@@ -139,11 +156,17 @@ export default function Profile() {
           )}
         </section>
 
-        {/* Account shortcuts */}
-        <section className="mt-6">
-          <h2 className="mb-4 text-lg font-bold text-slate-900">
-            Account Shortcuts
-          </h2>
+        {/* Account Shortcuts */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-slate-900">
+              Account Shortcuts
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Quickly access important sections of your account.
+            </p>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <ShortcutCard
@@ -162,7 +185,7 @@ export default function Profile() {
 
             <ShortcutCard
               to="/transactions"
-              icon={ArrowRight}
+              icon={ReceiptText}
               title="Transactions"
               description="Review your financial activity."
             />
@@ -176,23 +199,31 @@ export default function Profile() {
           </div>
         </section>
 
-        <p className="mt-8 text-center text-xs text-slate-400">
-          Your financial journey, all in one place.
-        </p>
+        {/* Footer */}
+        <footer className="border-t border-slate-200 pt-6 text-center">
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+            <ShieldCheck size={15} />
+            Your financial journey, all in one place.
+          </div>
+        </footer>
       </div>
     </main>
   );
 }
 
+/* Information Card */
 function InfoCard({ icon: Icon, label, value }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4 transition hover:border-blue-100 hover:bg-blue-50/40">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
         <Icon size={19} />
       </div>
 
       <div className="min-w-0">
-        <p className="text-xs font-medium text-slate-500">{label}</p>
+        <p className="text-xs font-medium text-slate-500">
+          {label}
+        </p>
+
         <p className="mt-1 break-words text-sm font-semibold text-slate-800">
           {value}
         </p>
@@ -201,18 +232,22 @@ function InfoCard({ icon: Icon, label, value }) {
   );
 }
 
+/* Shortcut Card */
 function ShortcutCard({ to, icon: Icon, title, description }) {
   return (
     <Link
       to={to}
-      className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+      className="group flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-800 transition group-hover:bg-blue-800 group-hover:text-white">
         <Icon size={22} />
       </div>
 
       <div className="min-w-0 flex-1">
-        <h3 className="font-semibold text-slate-900">{title}</h3>
+        <h3 className="font-semibold text-slate-900">
+          {title}
+        </h3>
+
         <p className="mt-1 text-sm leading-5 text-slate-500">
           {description}
         </p>
@@ -220,7 +255,7 @@ function ShortcutCard({ to, icon: Icon, title, description }) {
 
       <ArrowRight
         size={18}
-        className="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600"
+        className="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-700"
       />
     </Link>
   );

@@ -5,7 +5,6 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
-  Legend,
 } from "recharts";
 import { PieChart as PieChartIcon } from "lucide-react";
 
@@ -25,20 +24,26 @@ const currency = (value) =>
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(Number(value) || 0);
 
 export default function CategoryChart({
   transactions = [],
   data,
   loading = false,
 }) {
-  const source = Array.isArray(data) ? data : transactions;
+  const source = Array.isArray(data)
+    ? data
+    : Array.isArray(transactions)
+      ? transactions
+      : [];
 
   const categoryMap = source.reduce((result, item) => {
-    if (item.type !== "expense") return result;
+    if (item?.type !== "expense") return result;
 
-    const category = item.category || "Other";
-    const amount = Number(item.amount) || 0;
+    const category = item.category?.trim() || "Other";
+    const amount = Number(item.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) return result;
 
     result[category] = (result[category] || 0) + amount;
     return result;
@@ -46,13 +51,12 @@ export default function CategoryChart({
 
   const chartData = Object.entries(categoryMap)
     .map(([name, value]) => ({ name, value }))
-    .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value);
 
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-900">
@@ -77,10 +81,12 @@ export default function CategoryChart({
           <div className="rounded-full bg-slate-100 p-4 text-slate-400">
             <PieChartIcon size={26} />
           </div>
+
           <p className="mt-3 text-sm font-semibold text-slate-700">
             No expense data yet
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+
+          <p className="mt-1 max-w-xs text-xs text-slate-500">
             Add an expense to see your category breakdown.
           </p>
         </div>
@@ -110,7 +116,7 @@ export default function CategoryChart({
                 </Pie>
 
                 <Tooltip
-                  formatter={(value) => currency(Number(value))}
+                  formatter={(value) => currency(value)}
                   contentStyle={{
                     borderRadius: "12px",
                     border: "1px solid #E2E8F0",
@@ -122,7 +128,9 @@ export default function CategoryChart({
             </ResponsiveContainer>
 
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xs text-slate-500">Total spent</span>
+              <span className="text-xs text-slate-500">
+                Total spent
+              </span>
               <span className="mt-1 text-lg font-bold text-slate-900">
                 {currency(total)}
               </span>
@@ -142,6 +150,7 @@ export default function CategoryChart({
                       backgroundColor: COLORS[index % COLORS.length],
                     }}
                   />
+
                   <span className="truncate text-sm text-slate-600">
                     {item.name}
                   </span>
@@ -151,6 +160,7 @@ export default function CategoryChart({
                   <span className="text-sm font-semibold text-slate-900">
                     {currency(item.value)}
                   </span>
+
                   <span className="ml-2 text-xs text-slate-400">
                     {Math.round((item.value / total) * 100)}%
                   </span>
@@ -158,6 +168,12 @@ export default function CategoryChart({
               </div>
             ))}
           </div>
+
+          {chartData.length > 5 && (
+            <p className="mt-3 text-center text-xs text-slate-400">
+              +{chartData.length - 5} more categories included in chart
+            </p>
+          )}
         </>
       )}
     </section>

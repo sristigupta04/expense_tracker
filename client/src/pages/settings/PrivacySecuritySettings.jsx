@@ -9,7 +9,6 @@ import {
   EyeOff,
   KeyRound,
   Monitor,
-  LogOut,
   Fingerprint,
   Download,
   AlertCircle,
@@ -104,8 +103,10 @@ export default function PrivacySecuritySettings() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
   const [twoFactorPreference, setTwoFactorPreference] = useState(() => {
     try {
       return localStorage.getItem("expenseTracker2FAPreference") === "true";
@@ -167,7 +168,6 @@ export default function PrivacySecuritySettings() {
     setSaving(true);
 
     try {
-      // Requires PATCH /api/auth/change-password on the backend.
       await api.patch("/auth/change-password", {
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
@@ -177,6 +177,12 @@ export default function PrivacySecuritySettings() {
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
+      });
+
+      setVisible({
+        current: false,
+        next: false,
+        confirm: false,
       });
 
       setSuccess("Password changed successfully.");
@@ -214,20 +220,27 @@ export default function PrivacySecuritySettings() {
   async function handleExportPrivacyData() {
     setError("");
     setSuccess("");
+    setExporting(true);
+
+    let url = "";
 
     try {
       const response = await api.get("/auth/me");
+
       const blob = new Blob(
         [JSON.stringify(response.data, null, 2)],
         { type: "application/json" }
       );
 
-      const url = URL.createObjectURL(blob);
+      url = URL.createObjectURL(blob);
+
       const link = document.createElement("a");
       link.href = url;
       link.download = "expense-tracker-account-data.json";
+
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
 
       setSuccess("Account data export downloaded.");
     } catch (err) {
@@ -235,11 +248,13 @@ export default function PrivacySecuritySettings() {
         err?.response?.data?.message ||
           "Account data could not be exported. Verify your authenticated account endpoint."
       );
-    }
-  }
+    } finally {
+      if (url) {
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
 
-  function handleSignOut() {
-    navigate("/login");
+      setExporting(false);
+    }
   }
 
   return (
@@ -284,6 +299,7 @@ export default function PrivacySecuritySettings() {
             ) : (
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             )}
+
             <span>{error || success}</span>
           </div>
         )}
@@ -293,6 +309,7 @@ export default function PrivacySecuritySettings() {
             <div className="rounded-xl bg-white/15 p-3">
               <ShieldCheck size={27} />
             </div>
+
             <div>
               <h2 className="text-lg font-bold">Account security</h2>
               <p className="mt-1 text-sm leading-5 text-blue-100">
@@ -315,7 +332,7 @@ export default function PrivacySecuritySettings() {
             <SecurityRow
               icon={Fingerprint}
               title="Two-step verification"
-              description="Store your preference for enabling extra verification. This does not activate server-side two-factor authentication."
+              description="This is a saved preference only. Actual two-factor authentication requires backend implementation."
             >
               <button
                 type="button"
@@ -342,10 +359,16 @@ export default function PrivacySecuritySettings() {
               <button
                 type="button"
                 onClick={handleExportPrivacyData}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50"
+                disabled={exporting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 disabled:opacity-60"
               >
-                <Download size={16} />
-                Export data
+                {exporting ? (
+                  <LoaderCircle size={16} className="animate-spin" />
+                ) : (
+                  <Download size={16} />
+                )}
+
+                {exporting ? "Exporting..." : "Export data"}
               </button>
             </SecurityRow>
           </div>
@@ -357,6 +380,7 @@ export default function PrivacySecuritySettings() {
               <div className="rounded-xl bg-blue-50 p-2.5 text-blue-800">
                 <KeyRound size={21} />
               </div>
+
               <div>
                 <h2 className="text-lg font-bold">Change password</h2>
                 <p className="mt-1 text-sm text-slate-500">
@@ -366,7 +390,10 @@ export default function PrivacySecuritySettings() {
             </div>
           </div>
 
-          <form onSubmit={handlePasswordChange} className="space-y-5 p-5 sm:p-7">
+          <form
+            onSubmit={handlePasswordChange}
+            className="space-y-5 p-5 sm:p-7"
+          >
             <PasswordField
               label="Current password"
               value={form.currentPassword}
@@ -410,7 +437,12 @@ export default function PrivacySecuritySettings() {
                       check.valid ? "text-emerald-700" : "text-slate-500"
                     }`}
                   >
-                    <CheckCircle2 size={15} />
+                    <CheckCircle2
+                      size={15}
+                      className={
+                        check.valid ? "text-emerald-600" : "text-slate-300"
+                      }
+                    />
                     {check.label}
                   </div>
                 ))}
@@ -458,6 +490,7 @@ export default function PrivacySecuritySettings() {
                 ) : (
                   <LockKeyhole size={17} />
                 )}
+
                 {saving ? "Updating..." : "Update password"}
               </button>
             </div>
@@ -466,15 +499,20 @@ export default function PrivacySecuritySettings() {
 
         <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <div className="flex items-start gap-3">
-            <ShieldAlert size={21} className="mt-0.5 shrink-0 text-amber-700" />
+            <ShieldAlert
+              size={21}
+              className="mt-0.5 shrink-0 text-amber-700"
+            />
+
             <div>
               <h2 className="font-semibold text-amber-900">
                 Security reminder
               </h2>
+
               <p className="mt-1 text-sm leading-6 text-amber-800">
                 Never share your password or authentication token. If you
-                suspect unauthorized access, use the app's real sign-out
-                function and update your password.
+                suspect unauthorized access, sign out using the app's
+                authentication controls and update your password.
               </p>
             </div>
           </div>
@@ -485,12 +523,15 @@ export default function PrivacySecuritySettings() {
             <div className="rounded-xl bg-slate-100 p-2.5 text-slate-700">
               <Monitor size={20} />
             </div>
+
             <div className="flex-1">
               <h2 className="font-semibold">Sign-in help</h2>
+
               <p className="mt-1 text-sm leading-5 text-slate-500">
                 If you cannot access your account, use the password recovery
                 page.
               </p>
+
               <button
                 type="button"
                 onClick={() => navigate("/forgot-password")}

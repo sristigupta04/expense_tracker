@@ -1,10 +1,10 @@
+
 import { Link } from "react-router-dom";
 import {
   Wallet,
   ArrowUpRight,
   Pencil,
   Eye,
-  MoreVertical,
   Building2,
   CheckCircle2,
   Clock3,
@@ -39,24 +39,33 @@ const getStatusDetails = (status) => {
     };
   }
 
+  if (normalizedStatus === "inactive") {
+    return {
+      label: "Inactive",
+      icon: Ban,
+      className: "bg-slate-100 text-slate-600",
+    };
+  }
+
   return {
-    label: status || "Inactive",
+    label: String(status || "Unknown"),
     icon: Ban,
     className: "bg-slate-100 text-slate-600",
   };
 };
 
 const formatCurrency = (amount, currency = "INR") => {
-  const value = Number(amount || 0);
+  const value = Number(amount);
+  const safeValue = Number.isFinite(value) ? value : 0;
 
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(value);
+    }).format(safeValue);
   } catch {
-    return `₹${value.toLocaleString("en-IN")}`;
+    return `₹${safeValue.toLocaleString("en-IN")}`;
   }
 };
 
@@ -64,9 +73,12 @@ const maskAccountNumber = (accountNumber) => {
   if (!accountNumber) return "•••• ••••";
 
   const digits = String(accountNumber).replace(/\s/g, "");
-  const lastFour = digits.slice(-4);
 
-  return `•••• •••• ${lastFour}`;
+  if (digits.length <= 4) {
+    return `•••• ${digits}`;
+  }
+
+  return `•••• •••• ${digits.slice(-4)}`;
 };
 
 export default function AccountCard({ account }) {
@@ -74,15 +86,18 @@ export default function AccountCard({ account }) {
 
   const {
     id,
+    _id,
     accountName = "My Account",
     bankName = "Bank",
     accountType = "Other",
     accountNumber = "",
-    currentBalance = 0,
+    currentBalance,
     openingBalance = 0,
     currency = "INR",
     status = "Active",
   } = account;
+
+  const accountId = id ?? _id;
 
   const balance =
     currentBalance !== undefined && currentBalance !== null
@@ -95,10 +110,21 @@ export default function AccountCard({ account }) {
   const statusDetails = getStatusDetails(status);
   const StatusIcon = statusDetails.icon;
 
+  const detailsPath = accountId
+    ? `/bank-accounts/${accountId}`
+    : "/bank-accounts";
+
+  const editPath = accountId
+    ? `/bank-accounts/${accountId}/edit`
+    : "/bank-accounts";
+
+  const canNavigate = accountId != null;
+
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg">
       {/* Decorative background */}
       <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-blue-50 transition-transform duration-300 group-hover:scale-125" />
+
       <div className="pointer-events-none absolute right-10 top-20 h-16 w-16 rounded-full bg-indigo-50/70" />
 
       <div className="relative p-5 sm:p-6">
@@ -144,7 +170,7 @@ export default function AccountCard({ account }) {
           </p>
         </div>
 
-        {/* Balance section */}
+        {/* Balance */}
         <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-slate-500">
@@ -156,7 +182,11 @@ export default function AccountCard({ account }) {
             </div>
           </div>
 
-          <p className="mt-2 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <p
+            className={`mt-2 break-words text-2xl font-bold tracking-tight sm:text-3xl ${
+              Number(balance) < 0 ? "text-red-600" : "text-slate-900"
+            }`}
+          >
             {formatCurrency(balance, currency)}
           </p>
 
@@ -176,23 +206,31 @@ export default function AccountCard({ account }) {
 
         {/* Actions */}
         <div className="mt-5 flex items-center gap-3">
-          <Link
-            to={`/bank-accounts/${id}`}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Eye size={16} />
-            View Details
-            <ArrowUpRight size={15} />
-          </Link>
+          {canNavigate ? (
+            <>
+              <Link
+                to={detailsPath}
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <Eye size={16} />
+                View Details
+                <ArrowUpRight size={15} />
+              </Link>
 
-          <Link
-            to={`/bank-accounts/${id}/edit`}
-            aria-label={`Edit ${accountName}`}
-            title="Edit account"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Pencil size={17} />
-          </Link>
+              <Link
+                to={editPath}
+                aria-label={`Edit ${accountName}`}
+                title="Edit account"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <Pencil size={17} />
+              </Link>
+            </>
+          ) : (
+            <div className="w-full rounded-xl bg-slate-50 px-4 py-3 text-center text-xs text-slate-500">
+              Account ID unavailable
+            </div>
+          )}
         </div>
       </div>
     </article>

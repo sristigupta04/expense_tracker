@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import {
   CreditCard,
   Building2,
@@ -28,9 +29,30 @@ const defaultValues = {
 };
 
 const inputClass =
-  "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+  "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70";
 
 const labelClass = "text-sm font-semibold text-slate-700";
+
+const normalizeFormData = (data = {}) => ({
+  ...defaultValues,
+  ...data,
+  cardName: data.cardName ?? "",
+  bankName: data.bankName ?? "",
+  cardBrand: data.cardBrand ?? "Visa",
+  cardNumber: data.cardNumber ? String(data.cardNumber) : "",
+  cardHolder: data.cardHolder ?? "",
+  creditLimit:
+    data.creditLimit !== undefined && data.creditLimit !== null
+      ? String(data.creditLimit)
+      : "0",
+  availableLimit:
+    data.availableLimit !== undefined && data.availableLimit !== null
+      ? String(data.availableLimit)
+      : "",
+  billingDate: data.billingDate != null ? String(data.billingDate) : "",
+  dueDate: data.dueDate != null ? String(data.dueDate) : "",
+  notes: data.notes ?? "",
+});
 
 export default function CreditCardForm({
   initialData = {},
@@ -38,32 +60,29 @@ export default function CreditCardForm({
   submitLabel = "Save Credit Card",
   loading = false,
 }) {
-  const [formData, setFormData] = useState({
-    ...defaultValues,
-    ...initialData,
-    cardNumber: initialData.cardNumber
-      ? String(initialData.cardNumber)
-      : "",
-    creditLimit:
-      initialData.creditLimit !== undefined
-        ? String(initialData.creditLimit)
-        : "0",
-    availableLimit:
-      initialData.availableLimit !== undefined
-        ? String(initialData.availableLimit)
-        : "",
-  });
+  const [formData, setFormData] = useState(() =>
+    normalizeFormData(initialData)
+  );
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    setFormData(normalizeFormData(initialData));
+    setErrors({});
+    setSubmitError("");
+  }, [initialData]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
 
     setFormData((previous) => {
-      const next = { ...previous, [name]: value };
+      const next = {
+        ...previous,
+        [name]: value,
+      };
 
-      // Keep available credit in sync with the limit and outstanding balance
-      // when availableLimit is not manually maintained.
+      // Update available credit with the limit until manually edited.
       if (name === "creditLimit" && previous.availableLimit === "") {
         next.availableLimit = value;
       }
@@ -75,22 +94,46 @@ export default function CreditCardForm({
       ...previous,
       [name]: "",
     }));
+
+    setSubmitError("");
+  };
+
+  const handleCardNumberChange = (event) => {
+    const value = event.target.value.replace(/\D/g, "").slice(0, 19);
+
+    setFormData((previous) => ({
+      ...previous,
+      cardNumber: value,
+    }));
+
+    setErrors((previous) => ({
+      ...previous,
+      cardNumber: "",
+    }));
   };
 
   const validate = () => {
     const nextErrors = {};
 
+    const cardNumber = formData.cardNumber.replace(/\s/g, "");
+    const creditLimit = Number(formData.creditLimit);
+    const availableLimit = Number(formData.availableLimit);
+
     if (!formData.cardName.trim()) {
       nextErrors.cardName = "Card name is required.";
+    } else if (formData.cardName.trim().length > 60) {
+      nextErrors.cardName = "Card name must be under 60 characters.";
     }
 
     if (!formData.bankName.trim()) {
       nextErrors.bankName = "Bank name is required.";
+    } else if (formData.bankName.trim().length > 60) {
+      nextErrors.bankName = "Bank name must be under 60 characters.";
     }
 
     if (
-      formData.cardNumber &&
-      !/^\d{4,19}$/.test(formData.cardNumber.replace(/\s/g, ""))
+      cardNumber &&
+      !/^\d{4,19}$/.test(cardNumber)
     ) {
       nextErrors.cardNumber =
         "Enter a valid card number containing 4–19 digits.";
@@ -98,88 +141,102 @@ export default function CreditCardForm({
 
     if (
       formData.creditLimit.trim() === "" ||
-      !Number.isFinite(Number(formData.creditLimit)) ||
-      Number(formData.creditLimit) < 0
+      !Number.isFinite(creditLimit) ||
+      creditLimit < 0 ||
+      !/^\d+(\.\d{1,2})?$/.test(formData.creditLimit.trim())
     ) {
-      nextErrors.creditLimit = "Enter a valid credit limit.";
+      nextErrors.creditLimit =
+        "Enter a valid non-negative credit limit with up to 2 decimal places.";
     }
 
     if (
       formData.availableLimit !== "" &&
-      (!Number.isFinite(Number(formData.availableLimit)) ||
-        Number(formData.availableLimit) < 0 ||
-        Number(formData.availableLimit) > Number(formData.creditLimit))
+      (
+        !Number.isFinite(availableLimit) ||
+        availableLimit < 0 ||
+        availableLimit > creditLimit ||
+        !/^\d+(\.\d{1,2})?$/.test(formData.availableLimit.trim())
+      )
     ) {
       nextErrors.availableLimit =
-        "Available limit must be between zero and the credit limit.";
+        "Available credit must be between zero and the credit limit.";
     }
 
-    if (
-      formData.billingDate &&
-      formData.dueDate &&
-      Number(formData.dueDate) < Number(formData.billingDate)
-    ) {
-      nextErrors.dueDate =
-        "Due date must be on or after the billing date.";
+    if (formData.notes.length > 500) {
+      nextErrors.notes = "Notes cannot exceed 500 characters.";
     }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitError("");
 
-    if (!validate()) return;
+    if (loading || !validate()) return;
 
     const payload = {
       ...formData,
       cardName: formData.cardName.trim(),
       bankName: formData.bankName.trim(),
       cardHolder: formData.cardHolder.trim(),
-      // Store only the last four digits; do not retain the full card number.
+
+      // Only the last four digits are sent or stored.
       cardNumber: formData.cardNumber
         ? formData.cardNumber.replace(/\s/g, "").slice(-4)
         : "",
+
       creditLimit: Number(formData.creditLimit),
+
       availableLimit:
         formData.availableLimit === ""
           ? Number(formData.creditLimit)
           : Number(formData.availableLimit),
+
+      notes: formData.notes.trim(),
     };
 
-    onSubmit?.(payload);
+    try {
+      await onSubmit?.(payload);
+    } catch (error) {
+      setSubmitError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to save credit card. Please try again."
+      );
+    }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...defaultValues,
-      ...initialData,
-      cardNumber: initialData.cardNumber
-        ? String(initialData.cardNumber)
-        : "",
-      creditLimit:
-        initialData.creditLimit !== undefined
-          ? String(initialData.creditLimit)
-          : "0",
-      availableLimit:
-        initialData.availableLimit !== undefined
-          ? String(initialData.availableLimit)
-          : "",
-    });
+    setFormData(normalizeFormData(initialData));
     setErrors({});
+    setSubmitError("");
   };
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
-      {/* Card details */}
+      {submitError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          <AlertCircle size={17} className="mt-0.5 shrink-0" />
+          {submitError}
+        </div>
+      )}
+
+      {/* Card Information */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
             <CreditCard size={21} />
           </div>
+
           <div>
-            <h2 className="font-bold text-slate-900">Card Information</h2>
+            <h2 className="font-bold text-slate-900">
+              Card Information
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Enter the basic details of your credit card.
             </p>
@@ -197,10 +254,14 @@ export default function CreditCardForm({
               value={formData.cardName}
               onChange={handleChange}
               placeholder="e.g. Personal Credit Card"
+              maxLength={60}
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.cardName)}
             />
-            {errors.cardName && <ErrorMessage message={errors.cardName} />}
+            {errors.cardName && (
+              <ErrorMessage message={errors.cardName} />
+            )}
           </div>
 
           <div>
@@ -218,11 +279,15 @@ export default function CreditCardForm({
                 value={formData.bankName}
                 onChange={handleChange}
                 placeholder="e.g. HDFC Bank"
+                maxLength={60}
+                disabled={loading}
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.bankName)}
               />
             </div>
-            {errors.bankName && <ErrorMessage message={errors.bankName} />}
+            {errors.bankName && (
+              <ErrorMessage message={errors.bankName} />
+            )}
           </div>
 
           <div>
@@ -234,6 +299,7 @@ export default function CreditCardForm({
               name="cardBrand"
               value={formData.cardBrand}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="Visa">Visa</option>
@@ -259,6 +325,8 @@ export default function CreditCardForm({
                 value={formData.cardHolder}
                 onChange={handleChange}
                 placeholder="Name on card"
+                maxLength={60}
+                disabled={loading}
                 className={`${inputClass} pl-10`}
               />
             </div>
@@ -271,20 +339,23 @@ export default function CreditCardForm({
             <input
               id="cardNumber"
               name="cardNumber"
-              type="text"
+              type="password"
               inputMode="numeric"
               autoComplete="off"
               value={formData.cardNumber}
-              onChange={handleChange}
+              onChange={handleCardNumberChange}
               placeholder="Enter digits only"
               maxLength={19}
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.cardNumber)}
             />
+
             <p className="mt-1.5 text-xs text-slate-400">
               Only the last four digits are submitted for identification.
               Never enter your CVV, PIN or OTP.
             </p>
+
             {errors.cardNumber && (
               <ErrorMessage message={errors.cardNumber} />
             )}
@@ -292,12 +363,13 @@ export default function CreditCardForm({
         </div>
       </section>
 
-      {/* Credit limit */}
+      {/* Credit Limit */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
             <Wallet size={21} />
           </div>
+
           <div>
             <h2 className="font-bold text-slate-900">Credit Limit</h2>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -320,6 +392,7 @@ export default function CreditCardForm({
               value={formData.creditLimit}
               onChange={handleChange}
               placeholder="e.g. 100000"
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.creditLimit)}
             />
@@ -341,6 +414,7 @@ export default function CreditCardForm({
               value={formData.availableLimit}
               onChange={handleChange}
               placeholder="Same as credit limit"
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.availableLimit)}
             />
@@ -358,6 +432,7 @@ export default function CreditCardForm({
               name="currency"
               value={formData.currency}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="INR">INR — Indian Rupee (₹)</option>
@@ -369,14 +444,17 @@ export default function CreditCardForm({
         </div>
       </section>
 
-      {/* Billing details */}
+      {/* Billing Information */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
             <CalendarDays size={21} />
           </div>
+
           <div>
-            <h2 className="font-bold text-slate-900">Billing Information</h2>
+            <h2 className="font-bold text-slate-900">
+              Billing Information
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Keep track of your statement and payment dates.
             </p>
@@ -393,6 +471,7 @@ export default function CreditCardForm({
               name="billingDate"
               value={formData.billingDate}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="">Select billing day</option>
@@ -416,6 +495,7 @@ export default function CreditCardForm({
               name="dueDate"
               value={formData.dueDate}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="">Select due day</option>
@@ -428,7 +508,6 @@ export default function CreditCardForm({
                 );
               })}
             </select>
-            {errors.dueDate && <ErrorMessage message={errors.dueDate} />}
           </div>
 
           <div className="sm:col-span-2">
@@ -440,6 +519,7 @@ export default function CreditCardForm({
               name="status"
               value={formData.status}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="Active">Active</option>
@@ -450,14 +530,17 @@ export default function CreditCardForm({
         </div>
       </section>
 
-      {/* Notes */}
+      {/* Additional Notes */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
             <FileText size={20} />
           </div>
+
           <div>
-            <h2 className="font-bold text-slate-900">Additional Notes</h2>
+            <h2 className="font-bold text-slate-900">
+              Additional Notes
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Add optional information for your records.
             </p>
@@ -476,6 +559,7 @@ export default function CreditCardForm({
             value={formData.notes}
             onChange={handleChange}
             placeholder="Add a note..."
+            disabled={loading}
             className={`${inputClass} resize-y`}
           />
           <p className="mt-1 text-right text-xs text-slate-400">
@@ -484,9 +568,12 @@ export default function CreditCardForm({
         </div>
       </section>
 
-      {/* Security note */}
+      {/* Security Note */}
       <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-        <ShieldCheck size={20} className="mt-0.5 shrink-0 text-blue-700" />
+        <ShieldCheck
+          size={20}
+          className="mt-0.5 shrink-0 text-blue-700"
+        />
         <p className="text-sm leading-6 text-blue-900">
           For your security, do not store your full card number, CVV, PIN or
           OTP in this expense tracker. Use a card nickname and last four
@@ -500,7 +587,7 @@ export default function CreditCardForm({
           type="button"
           onClick={handleReset}
           disabled={loading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RotateCcw size={16} />
           Reset

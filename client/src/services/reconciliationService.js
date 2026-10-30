@@ -2,116 +2,123 @@ import api from "./api";
 
 const BASE_URL = "/reconciliation";
 
+const validateId = (id, label = "ID") => {
+  if (!id || !/^[a-f\d]{24}$/i.test(String(id))) {
+    throw new Error(`A valid ${label} is required.`);
+  }
+};
+
+const validatePayload = (payload, label = "data") => {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
+    throw new Error(`Valid ${label} is required.`);
+  }
+};
+
 const reconciliationService = {
-  // Get reconciliation history with optional filters
+  // Get reconciliation history
   getAll: async (params = {}) => {
-    const response = await api.get(BASE_URL, { params });
-    return response.data;
+    const { data } = await api.get(BASE_URL, { params });
+    return data;
   },
 
-  // Get reconciliation details by ID
+  // Get reconciliation details
   getById: async (reconciliationId) => {
-    if (!reconciliationId) {
-      throw new Error("Reconciliation ID is required.");
-    }
+    validateId(reconciliationId, "reconciliation ID");
 
-    const response = await api.get(
+    const { data } = await api.get(
       `${BASE_URL}/${encodeURIComponent(reconciliationId)}`
     );
 
-    return response.data;
+    return data;
   },
 
-  // Start reconciliation for a bank account or statement
+  // Start reconciliation
   start: async (payload) => {
-    if (!payload) {
-      throw new Error("Reconciliation data is required.");
-    }
+    validatePayload(payload, "reconciliation data");
 
     if (!payload.accountId && !payload.statementId) {
       throw new Error("Bank account ID or statement ID is required.");
     }
 
-    const response = await api.post(`${BASE_URL}/start`, payload);
-    return response.data;
+    const { data } = await api.post(`${BASE_URL}/start`, payload);
+    return data;
   },
 
   // Get reconciliation summary
   getSummary: async (params = {}) => {
-    const response = await api.get(`${BASE_URL}/summary`, { params });
-    return response.data;
+    const { data } = await api.get(`${BASE_URL}/summary`, { params });
+    return data;
   },
 
   // Get unmatched transactions
   getUnmatched: async (params = {}) => {
-    const response = await api.get(`${BASE_URL}/unmatched`, { params });
-    return response.data;
+    const { data } = await api.get(`${BASE_URL}/unmatched`, { params });
+    return data;
   },
 
-  // Mark a bank transaction and app transaction as matched
+  // Match bank and app transactions
   matchTransactions: async (payload) => {
-    if (!payload?.bankTransactionId || !payload?.appTransactionId) {
+    validatePayload(payload, "matching data");
+
+    if (!payload.bankTransactionId || !payload.appTransactionId) {
       throw new Error(
         "Both bank transaction ID and app transaction ID are required."
       );
     }
 
-    const response = await api.post(`${BASE_URL}/match`, payload);
-    return response.data;
+    const { data } = await api.post(`${BASE_URL}/match`, payload);
+    return data;
   },
 
-  // Mark a transaction as unmatched
+  // Mark a match as unmatched
   unmatchTransaction: async (matchId) => {
-    if (!matchId) {
-      throw new Error("Match ID is required.");
-    }
+    validateId(matchId, "match ID");
 
-    const response = await api.patch(
+    const { data } = await api.patch(
       `${BASE_URL}/matches/${encodeURIComponent(matchId)}/unmatch`
     );
 
-    return response.data;
+    return data;
   },
 
   // Get matched transaction pairs
   getMatches: async (reconciliationId, params = {}) => {
-    if (!reconciliationId) {
-      throw new Error("Reconciliation ID is required.");
-    }
+    validateId(reconciliationId, "reconciliation ID");
 
-    const response = await api.get(
+    const { data } = await api.get(
       `${BASE_URL}/${encodeURIComponent(reconciliationId)}/matches`,
       { params }
     );
 
-    return response.data;
+    return data;
   },
 
   // Complete reconciliation
   complete: async (reconciliationId, payload = {}) => {
-    if (!reconciliationId) {
-      throw new Error("Reconciliation ID is required.");
-    }
+    validateId(reconciliationId, "reconciliation ID");
+    validatePayload(payload, "completion data");
 
-    const response = await api.post(
+    const { data } = await api.post(
       `${BASE_URL}/${encodeURIComponent(reconciliationId)}/complete`,
       payload
     );
 
-    return response.data;
+    return data;
   },
 
-  // Delete a reconciliation record
+  // Delete reconciliation
   remove: async (reconciliationId) => {
-    if (!reconciliationId) {
-      throw new Error("Reconciliation ID is required.");
-    }
+    validateId(reconciliationId, "reconciliation ID");
 
-    const response = await api.delete(
+    const { data } = await api.delete(
       `${BASE_URL}/${encodeURIComponent(reconciliationId)}`
     );
 
-    return response.data;
+    return data;
   },
 };
 

@@ -9,41 +9,56 @@ const bankAccountService = {
     return response.data;
   },
 
-  // Get bank account by ID
+  // Get account by ID
   getById: async (id) => {
+    if (!id) throw new Error("Bank account ID is required.");
+
     const response = await api.get(`${BASE_URL}/${id}`);
     return response.data;
   },
 
-  // Create a bank account
+  // Create account
   create: async (accountData) => {
+    if (!accountData || typeof accountData !== "object") {
+      throw new Error("Valid bank account details are required.");
+    }
+
     const response = await api.post(BASE_URL, accountData);
     return response.data;
   },
 
-  // Update bank account
+  // Update account
   update: async (id, accountData) => {
+    if (!id) throw new Error("Bank account ID is required.");
+
     const response = await api.put(`${BASE_URL}/${id}`, accountData);
     return response.data;
   },
 
-  // Delete bank account
+  // Delete account
   remove: async (id) => {
+    if (!id) throw new Error("Bank account ID is required.");
+
     const response = await api.delete(`${BASE_URL}/${id}`);
     return response.data;
   },
 
-  // Get transactions for a bank account
+  // Get account transactions
   getTransactions: async (id, params = {}) => {
+    if (!id) throw new Error("Bank account ID is required.");
+
     const response = await api.get(
       `${BASE_URL}/${id}/transactions`,
       { params }
     );
+
     return response.data;
   },
 
   // Get account balance
   getBalance: async (id) => {
+    if (!id) throw new Error("Bank account ID is required.");
+
     const response = await api.get(`${BASE_URL}/${id}/balance`);
     return response.data;
   },

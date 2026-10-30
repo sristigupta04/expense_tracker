@@ -1,5 +1,10 @@
 
-import { AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  TrendingUp,
+} from "lucide-react";
+
 import formatCurrency from "../../utils/formatcurrency";
 
 export default function Budgetprogress({
@@ -9,43 +14,68 @@ export default function Budgetprogress({
   showDetails = true,
   size = "default",
 }) {
-  const budgetLimit = Math.max(0, Number(limit) || 0);
-  const amountSpent = Math.max(0, Number(spent) || 0);
+  const parsedLimit = Number(limit);
+  const parsedSpent = Number(spent);
+
+  const budgetLimit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? parsedLimit
+      : 0;
+
+  const amountSpent =
+    Number.isFinite(parsedSpent) && parsedSpent > 0
+      ? parsedSpent
+      : 0;
 
   const percentage =
-    budgetLimit > 0 ? (amountSpent / budgetLimit) * 100 : 0;
+    budgetLimit > 0
+      ? (amountSpent / budgetLimit) * 100
+      : amountSpent > 0
+        ? 100
+        : 0;
 
   const progress = Math.min(percentage, 100);
   const remaining = budgetLimit - amountSpent;
 
-  const isOverBudget = amountSpent > budgetLimit;
-  const isNearLimit = percentage >= 80 && !isOverBudget;
+  const hasNoLimit = budgetLimit === 0;
+  const isOverBudget = !hasNoLimit && amountSpent > budgetLimit;
+  const isNearLimit =
+    !hasNoLimit && percentage >= 80 && !isOverBudget;
 
-  const status = isOverBudget
-    ? "Budget exceeded"
-    : isNearLimit
-      ? "Approaching limit"
-      : "Within budget";
+  const status = hasNoLimit
+    ? "No budget limit"
+    : isOverBudget
+      ? "Budget exceeded"
+      : isNearLimit
+        ? "Approaching limit"
+        : "Within budget";
 
-  const progressColor = isOverBudget
-    ? "bg-red-500"
-    : isNearLimit
-      ? "bg-amber-500"
-      : "bg-blue-600";
+  const progressColor = hasNoLimit
+    ? "bg-slate-300"
+    : isOverBudget
+      ? "bg-red-500"
+      : isNearLimit
+        ? "bg-amber-500"
+        : "bg-blue-600";
 
-  const statusColor = isOverBudget
-    ? "text-red-700 bg-red-50"
-    : isNearLimit
-      ? "text-amber-700 bg-amber-50"
-      : "text-emerald-700 bg-emerald-50";
+  const statusColor = hasNoLimit
+    ? "text-slate-600 bg-slate-100"
+    : isOverBudget
+      ? "text-red-700 bg-red-50"
+      : isNearLimit
+        ? "text-amber-700 bg-amber-50"
+        : "text-emerald-700 bg-emerald-50";
 
-  const StatusIcon = isOverBudget
+  const StatusIcon = hasNoLimit
     ? AlertTriangle
-    : isNearLimit
-      ? TrendingUp
-      : CheckCircle2;
+    : isOverBudget
+      ? AlertTriangle
+      : isNearLimit
+        ? TrendingUp
+        : CheckCircle2;
 
-  const barHeight = size === "compact" ? "h-2" : "h-2.5";
+  const barHeight =
+    size === "compact" ? "h-2" : "h-2.5";
 
   return (
     <section className="w-full">
@@ -66,7 +96,7 @@ export default function Budgetprogress({
             className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor}`}
           >
             <StatusIcon size={13} />
-            {Math.round(percentage)}%
+            {hasNoLimit ? "—" : `${Math.round(percentage)}%`}
           </span>
         </div>
       )}
@@ -78,7 +108,11 @@ export default function Budgetprogress({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(progress)}
-        aria-valuetext={`${Math.round(percentage)} percent used`}
+        aria-valuetext={
+          hasNoLimit
+            ? "No budget limit set"
+            : `${Math.round(percentage)} percent used`
+        }
       >
         <div
           className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
@@ -89,18 +123,22 @@ export default function Budgetprogress({
       {showDetails && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-500">
-            {isOverBudget
-              ? `${formatCurrency(Math.abs(remaining))} over limit`
-              : `${formatCurrency(remaining)} remaining`}
+            {hasNoLimit
+              ? `${formatCurrency(amountSpent)} spent · No limit`
+              : isOverBudget
+                ? `${formatCurrency(Math.abs(remaining))} over limit`
+                : `${formatCurrency(remaining)} remaining`}
           </span>
 
           <span
             className={`inline-flex items-center gap-1 text-xs font-medium ${
-              isOverBudget
-                ? "text-red-600"
-                : isNearLimit
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+              hasNoLimit
+                ? "text-slate-500"
+                : isOverBudget
+                  ? "text-red-600"
+                  : isNearLimit
+                    ? "text-amber-600"
+                    : "text-emerald-600"
             }`}
           >
             <StatusIcon size={14} />

@@ -5,110 +5,112 @@ const BASE_URL = "/credit-cards";
 const creditCardService = {
   // Get all credit cards
   getAll: async (params = {}) => {
-    const response = await api.get(BASE_URL, { params });
-    return response.data;
+    const { data } = await api.get(BASE_URL, { params });
+    return data;
   },
 
-  // Get credit card details by ID
+  // Get credit card by ID
   getById: async (cardId) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
-    }
+    if (!cardId) throw new Error("Credit card ID is required.");
 
-    const response = await api.get(
+    const { data } = await api.get(
       `${BASE_URL}/${encodeURIComponent(cardId)}`
     );
 
-    return response.data;
+    return data;
   },
 
-  // Add a new credit card
+  // Create credit card
   create: async (cardData) => {
-    if (!cardData) {
-      throw new Error("Credit card data is required.");
+    if (
+      !cardData ||
+      typeof cardData !== "object" ||
+      Array.isArray(cardData)
+    ) {
+      throw new Error("Valid credit card details are required.");
     }
 
-    const response = await api.post(BASE_URL, cardData);
-    return response.data;
+    const { data } = await api.post(BASE_URL, cardData);
+    return data;
   },
 
-  // Update credit card details
+  // Update credit card
   update: async (cardId, cardData) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
+    if (!cardId) throw new Error("Credit card ID is required.");
+
+    if (
+      !cardData ||
+      typeof cardData !== "object" ||
+      Array.isArray(cardData)
+    ) {
+      throw new Error("Valid credit card details are required.");
     }
 
-    const response = await api.put(
+    const { data } = await api.put(
       `${BASE_URL}/${encodeURIComponent(cardId)}`,
       cardData
     );
 
-    return response.data;
+    return data;
   },
 
-  // Delete a credit card
+  // Delete credit card
   remove: async (cardId) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
-    }
+    if (!cardId) throw new Error("Credit card ID is required.");
 
-    const response = await api.delete(
+    const { data } = await api.delete(
       `${BASE_URL}/${encodeURIComponent(cardId)}`
     );
 
-    return response.data;
+    return data;
   },
 
-  // Get transactions for a credit card
+  // Get card transactions
   getTransactions: async (cardId, params = {}) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
-    }
+    if (!cardId) throw new Error("Credit card ID is required.");
 
-    const response = await api.get(
+    const { data } = await api.get(
       `${BASE_URL}/${encodeURIComponent(cardId)}/transactions`,
       { params }
     );
 
-    return response.data;
+    return data;
   },
 
-  // Record a credit card payment
+  // Make credit card payment
   makePayment: async (cardId, paymentData) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
+    if (!cardId) throw new Error("Credit card ID is required.");
+
+    const amount = Number(paymentData?.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Enter a valid payment amount greater than zero.");
     }
 
-    if (!paymentData || Number(paymentData.amount) <= 0) {
-      throw new Error("Enter a valid payment amount.");
-    }
-
-    const response = await api.post(
+    const { data } = await api.post(
       `${BASE_URL}/${encodeURIComponent(cardId)}/payments`,
-      paymentData
+      { ...paymentData, amount }
     );
 
-    return response.data;
+    return data;
   },
 
   // Get payment history
   getPayments: async (cardId, params = {}) => {
-    if (!cardId) {
-      throw new Error("Credit card ID is required.");
-    }
+    if (!cardId) throw new Error("Credit card ID is required.");
 
-    const response = await api.get(
+    const { data } = await api.get(
       `${BASE_URL}/${encodeURIComponent(cardId)}/payments`,
       { params }
     );
 
-    return response.data;
+    return data;
   },
 
-  // Get credit card spending summary
+  // Get credit card summary
   getSummary: async (params = {}) => {
-    const response = await api.get(`${BASE_URL}/summary`, { params });
-    return response.data;
+    const { data } = await api.get(`${BASE_URL}/summary`, { params });
+    return data;
   },
 };
 

@@ -10,9 +10,12 @@ function getNextDueDate(date, frequency) {
     return next;
   }
 
+  if (!["monthly", "yearly"].includes(frequency)) {
+    throw new Error(`Unsupported recurring frequency: ${frequency}`);
+  }
+
   const originalDay = next.getDate();
-  const targetMonth =
-    next.getMonth() + (frequency === "monthly" ? 1 : 12);
+  const targetMonth = next.getMonth() + (frequency === "monthly" ? 1 : 12);
 
   next.setDate(1);
   next.setMonth(targetMonth);
@@ -24,6 +27,7 @@ function getNextDueDate(date, frequency) {
   ).getDate();
 
   next.setDate(Math.min(originalDay, lastDay));
+
   return next;
 }
 
@@ -37,7 +41,6 @@ async function processRecurringTransactions() {
 
   for (const record of dueRecords) {
     try {
-      // Process overdue occurrences in order; unique key prevents duplicates.
       let dueDate = new Date(record.nextDueDate);
       let processed = 0;
 
@@ -70,7 +73,7 @@ async function processRecurringTransactions() {
 
         record.lastGeneratedDate = dueDate;
         dueDate = getNextDueDate(dueDate, record.frequency);
-        processed += 1;
+        processed++;
       }
 
       record.nextDueDate = dueDate;
@@ -90,13 +93,23 @@ async function processRecurringTransactions() {
 }
 
 function startRecurringScheduler() {
-  // Runs every day at 00:05 in the server's local timezone.
-  cron.schedule("5 0 * * *", () => {
-    processRecurringTransactions().catch(console.error);
-  });
+  cron.schedule(
+    "5 0 * * *",
+    () => {
+      processRecurringTransactions().catch((error) => {
+        console.error("Recurring scheduler failed:", error);
+      });
+    },
+    { timezone: "Asia/Kolkata" }
+  );
 
-  // Process any schedules that are already due when the server starts.
-  processRecurringTransactions().catch(console.error);
+  // Process overdue schedules when the server starts.
+  processRecurringTransactions().catch((error) => {
+    console.error("Initial recurring processing failed:", error);
+  });
 }
 
-module.exports = { startRecurringScheduler, processRecurringTransactions };
+module.exports = {
+  startRecurringScheduler,
+  processRecurringTransactions,
+};

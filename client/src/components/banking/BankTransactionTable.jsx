@@ -1,3 +1,4 @@
+
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -9,19 +10,35 @@ import {
 import { Link } from "react-router-dom";
 
 const formatCurrency = (amount, currency = "INR") => {
+  const value = Number(amount);
+
+  if (!Number.isFinite(value)) return "—";
+
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(value);
   } catch {
-    return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+    return `₹${value.toLocaleString("en-IN")}`;
   }
 };
 
 const formatDate = (date) => {
   if (!date) return "—";
+
+  // Avoid timezone shifts for date-only values.
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [year, month, day] = date.split("-").map(Number);
+    const parsed = new Date(year, month - 1, day);
+
+    return parsed.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
 
   const parsedDate = new Date(date);
 
@@ -40,13 +57,19 @@ const getTransactionType = (transaction) => {
   ).toLowerCase();
 
   if (["income", "credit", "deposit"].includes(type)) return "credit";
-  if (["expense", "debit", "withdrawal", "payment"].includes(type))
+
+  if (
+    ["expense", "debit", "withdrawal", "payment"].includes(type)
+  ) {
     return "debit";
+  }
+
   if (["transfer", "fund_transfer"].includes(type)) return "transfer";
 
-  // Fallback for imported bank statements.
   const direction = String(transaction.direction || "").toLowerCase();
+
   if (["credit", "income", "deposit"].includes(direction)) return "credit";
+
   if (["debit", "expense", "withdrawal"].includes(direction)) return "debit";
 
   return "debit";
@@ -82,6 +105,28 @@ const statusConfig = {
   reconciled: "bg-blue-50 text-blue-700",
 };
 
+const getDescription = (transaction) =>
+  transaction.description ||
+  transaction.merchant ||
+  transaction.narration ||
+  "Bank transaction";
+
+const getAccountName = (transaction) =>
+  transaction.accountName ||
+  transaction.bankName ||
+  transaction.account?.accountName ||
+  "Bank Account";
+
+const getAmount = (transaction) => {
+  const amount = Number(transaction.amount ?? 0);
+  return Number.isFinite(amount) ? Math.abs(amount) : 0;
+};
+
+const getDate = (transaction) =>
+  transaction.date ||
+  transaction.transactionDate ||
+  transaction.createdAt;
+
 export default function BankTransactionTable({
   transactions = [],
   onView,
@@ -94,7 +139,10 @@ export default function BankTransactionTable({
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="space-y-4 p-6">
           {[1, 2, 3, 4, 5].map((item) => (
-            <div key={item} className="flex animate-pulse items-center gap-4">
+            <div
+              key={item}
+              className="flex animate-pulse items-center gap-4"
+            >
               <div className="h-10 w-10 rounded-xl bg-slate-100" />
               <div className="flex-1 space-y-2">
                 <div className="h-3 w-1/3 rounded bg-slate-100" />
@@ -110,7 +158,7 @@ export default function BankTransactionTable({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Table heading */}
+      {/* Table Heading */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
           <h2 className="text-base font-bold text-slate-900">
@@ -133,9 +181,11 @@ export default function BankTransactionTable({
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
             <ReceiptText size={26} />
           </div>
+
           <h3 className="mt-4 font-bold text-slate-900">
             No transactions found
           </h3>
+
           <p className="mt-1 max-w-sm text-sm text-slate-500">
             Try changing your filters or import a bank statement to see
             transactions here.
@@ -143,7 +193,7 @@ export default function BankTransactionTable({
         </div>
       ) : (
         <>
-          {/* Desktop table */}
+          {/* Desktop Table */}
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[950px] text-left">
               <thead className="bg-slate-50">
@@ -185,27 +235,14 @@ export default function BankTransactionTable({
                   const statusClass =
                     statusConfig[status] || "bg-slate-100 text-slate-600";
 
-                  const accountName =
-                    transaction.accountName ||
-                    transaction.bankName ||
-                    transaction.account?.accountName ||
-                    "Bank Account";
-
-                  const description =
-                    transaction.description ||
-                    transaction.merchant ||
-                    transaction.narration ||
-                    "Bank transaction";
-
-                  const amount = Math.abs(
-                    Number(transaction.amount || 0)
-                  );
-
+                  const amount = getAmount(transaction);
                   const currency = transaction.currency || "INR";
+                  const transactionId =
+                    transaction.id ?? transaction._id;
 
                   return (
                     <tr
-                      key={transaction.id ?? transaction._id ?? index}
+                      key={transactionId ?? index}
                       className="transition hover:bg-slate-50/80"
                     >
                       <td className="px-5 py-4">
@@ -218,14 +255,14 @@ export default function BankTransactionTable({
 
                           <div className="min-w-0">
                             <p className="max-w-[220px] truncate text-sm font-semibold text-slate-800">
-                              {description}
+                              {getDescription(transaction)}
                             </p>
+
                             <p className="mt-1 text-xs text-slate-400">
                               Ref:{" "}
                               {transaction.referenceNumber ||
                                 transaction.reference ||
-                                transaction.id ||
-                                transaction._id ||
+                                transactionId ||
                                 "—"}
                             </p>
                           </div>
@@ -234,16 +271,12 @@ export default function BankTransactionTable({
 
                       <td className="px-5 py-4">
                         <p className="max-w-[170px] truncate text-sm font-medium text-slate-700">
-                          {accountName}
+                          {getAccountName(transaction)}
                         </p>
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          transaction.date ||
-                            transaction.transactionDate ||
-                            transaction.createdAt
-                        )}
+                        {formatDate(getDate(transaction))}
                       </td>
 
                       <td className="px-5 py-4">
@@ -256,7 +289,11 @@ export default function BankTransactionTable({
 
                       <td className="whitespace-nowrap px-5 py-4 text-right">
                         <span className={`text-sm font-bold ${config.amount}`}>
-                          {type === "credit" ? "+" : type === "debit" ? "−" : ""}
+                          {type === "credit"
+                            ? "+"
+                            : type === "debit"
+                              ? "−"
+                              : ""}
                           {formatCurrency(amount, currency)}
                         </span>
                       </td>
@@ -282,18 +319,12 @@ export default function BankTransactionTable({
             </table>
           </div>
 
-          {/* Mobile responsive cards */}
+          {/* Mobile Cards */}
           <div className="divide-y divide-slate-100 md:hidden">
             {transactions.map((transaction, index) => {
               const type = getTransactionType(transaction);
               const config = typeConfig[type];
               const TypeIcon = config.icon;
-
-              const description =
-                transaction.description ||
-                transaction.merchant ||
-                transaction.narration ||
-                "Bank transaction";
 
               const status = String(
                 transaction.status || "Completed"
@@ -302,7 +333,8 @@ export default function BankTransactionTable({
               const statusClass =
                 statusConfig[status] || "bg-slate-100 text-slate-600";
 
-              const amount = Math.abs(Number(transaction.amount || 0));
+              const amount = getAmount(transaction);
+              const currency = transaction.currency || "INR";
 
               return (
                 <div
@@ -319,22 +351,23 @@ export default function BankTransactionTable({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <p className="break-words text-sm font-semibold text-slate-800">
-                          {description}
+                          {getDescription(transaction)}
                         </p>
 
                         <p
                           className={`shrink-0 text-sm font-bold ${config.amount}`}
                         >
-                          {type === "credit" ? "+" : type === "debit" ? "−" : ""}
-                          {formatCurrency(amount, transaction.currency || "INR")}
+                          {type === "credit"
+                            ? "+"
+                            : type === "debit"
+                              ? "−"
+                              : ""}
+                          {formatCurrency(amount, currency)}
                         </p>
                       </div>
 
                       <p className="mt-1 text-xs text-slate-500">
-                        {transaction.accountName ||
-                          transaction.bankName ||
-                          transaction.account?.accountName ||
-                          "Bank Account"}
+                        {getAccountName(transaction)}
                       </p>
 
                       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -351,11 +384,7 @@ export default function BankTransactionTable({
                         </span>
 
                         <span className="text-xs text-slate-400">
-                          {formatDate(
-                            transaction.date ||
-                              transaction.transactionDate ||
-                              transaction.createdAt
-                          )}
+                          {formatDate(getDate(transaction))}
                         </span>
 
                         <TransactionAction
@@ -382,7 +411,9 @@ export default function BankTransactionTable({
           {onSort && (
             <button
               type="button"
-              onClick={() => onSort(sortBy === "newest" ? "oldest" : "newest")}
+              onClick={() =>
+                onSort(sortBy === "newest" ? "oldest" : "newest")
+              }
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900"
             >
               <ArrowUpDown size={14} />

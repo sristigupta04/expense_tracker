@@ -36,10 +36,8 @@ export default function Dashboard() {
   const [initialTransactionType, setInitialTransactionType] =
     useState("expense");
   const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
   const [exportMessage, setExportMessage] = useState("");
 
-  // Calculate income, expenses and balance.
   const financialSummary = useMemo(() => {
     return transactions.reduce(
       (summary, transaction) => {
@@ -77,21 +75,20 @@ export default function Dashboard() {
     user?.email?.split("@")[0] ||
     "there";
 
-  // Open the transaction form.
   const openTransactionForm = (type = "expense") => {
     setSelectedTransaction(null);
-    setInitialTransactionType(type);
-    setFormError("");
+    setInitialTransactionType(type === "income" ? "income" : "expense");
+    setExportMessage("");
     setFormOpen(true);
   };
 
-  // Open the form to edit a transaction.
   const openEditForm = (transaction) => {
     setSelectedTransaction(transaction);
     setInitialTransactionType(
-      String(transaction.type || "expense").toLowerCase()
+      String(transaction?.type || "expense").toLowerCase() === "income"
+        ? "income"
+        : "expense"
     );
-    setFormError("");
     setFormOpen(true);
   };
 
@@ -100,17 +97,16 @@ export default function Dashboard() {
 
     setFormOpen(false);
     setSelectedTransaction(null);
-    setFormError("");
   };
 
-  // Add or update a transaction.
   const handleSubmitTransaction = async (formData) => {
+    if (saving) return;
+
     setSaving(true);
-    setFormError("");
 
     try {
       if (selectedTransaction) {
-        const id = selectedTransaction._id || selectedTransaction.id;
+        const id = selectedTransaction._id ?? selectedTransaction.id;
 
         if (!id) {
           throw new Error("Transaction ID is missing.");
@@ -123,19 +119,11 @@ export default function Dashboard() {
 
       setFormOpen(false);
       setSelectedTransaction(null);
-      setFormError("");
-    } catch (err) {
-      setFormError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Unable to save transaction. Please try again."
-      );
     } finally {
       setSaving(false);
     }
   };
 
-  // Download transactions as a CSV file.
   const handleExport = () => {
     setExportMessage("");
 
@@ -145,16 +133,12 @@ export default function Dashboard() {
     }
 
     if (error) {
-      setExportMessage(
-        "Transactions could not be loaded. Please fix the login/session issue first."
-      );
+      setExportMessage("Transactions could not be loaded. Please try again.");
       return;
     }
 
     if (!transactions.length) {
-      setExportMessage(
-        "There are no transactions to export yet. Add a transaction first."
-      );
+      setExportMessage("No transactions available to export yet.");
       return;
     }
 
@@ -164,23 +148,25 @@ export default function Dashboard() {
       "Category",
       "Amount",
       "Date",
-      "Note",
+      "Description",
     ];
 
     const escapeCSV = (value) =>
       `"${String(value ?? "").replace(/"/g, '""')}"`;
 
     const rows = transactions.map((transaction) => [
-      transaction.title,
-      transaction.type,
-      transaction.category,
-      transaction.amount,
+      transaction.title || transaction.name || "",
+      transaction.type || "",
+      typeof transaction.category === "object"
+        ? transaction.category?.name || ""
+        : transaction.category || "",
+      transaction.amount ?? "",
       transaction.date
-        ? new Date(transaction.date).toLocaleDateString("en-IN")
+        ? String(transaction.date).slice(0, 10)
         : transaction.createdAt
-          ? new Date(transaction.createdAt).toLocaleDateString("en-IN")
+          ? String(transaction.createdAt).slice(0, 10)
           : "",
-      transaction.note,
+      transaction.description || transaction.note || "",
     ]);
 
     const csv = [headers, ...rows]
@@ -203,7 +189,6 @@ export default function Dashboard() {
     link.click();
     link.remove();
 
-    // Revoke after the browser has had time to start the download.
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     setExportMessage("Your CSV export has been started.");
@@ -247,7 +232,9 @@ export default function Dashboard() {
             {exportMessage}
           </div>
         )}
-<FinancialSnapshot />
+
+        <FinancialSnapshot />
+
         <SummaryCards
           transactions={transactions}
           balance={balance}
@@ -355,27 +342,12 @@ export default function Dashboard() {
 
       <TransactionForm
         open={formOpen}
-        transaction={
-          selectedTransaction
-            ? {
-                ...selectedTransaction,
-                type: initialTransactionType,
-              }
-            : { type: initialTransactionType }
-        }
+        transaction={selectedTransaction}
+        initialType={initialTransactionType}
         onSubmit={handleSubmitTransaction}
         onClose={closeTransactionForm}
         loading={saving}
       />
-
-      {formError && formOpen && (
-        <div
-          role="alert"
-          className="fixed bottom-20 right-4 z-50 max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-700 shadow-lg"
-        >
-          {formError}
-        </div>
-      )}
     </main>
   );
 }

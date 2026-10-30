@@ -19,21 +19,30 @@ export default function BudgetCard({
   const handleEdit = onEdit || editBudget;
   const handleDelete = onDelete || deleteBudget;
 
-  const limit = Math.max(0, Number(budget?.limit ?? budget?.amount) || 0);
-  const spent = Math.max(0, Number(budget?.spent ?? budget?.spentAmount) || 0);
+  const limit = Math.max(
+    0,
+    Number(budget?.limit ?? budget?.amount) || 0
+  );
+
+  const spent = Math.max(
+    0,
+    Number(budget?.spent ?? budget?.spentAmount) || 0
+  );
 
   const remaining = limit - spent;
   const percentage = limit > 0 ? (spent / limit) * 100 : 0;
   const progress = Math.min(percentage, 100);
 
-  const isOverBudget = spent > limit;
+  const isOverBudget = limit > 0 && spent > limit;
   const isNearLimit = percentage >= 80 && !isOverBudget;
 
   const status = isOverBudget
     ? "Over budget"
     : isNearLimit
       ? "Almost reached"
-      : "On track";
+      : limit === 0
+        ? "No limit set"
+        : "On track";
 
   const progressColor = isOverBudget
     ? "bg-red-500"
@@ -48,6 +57,19 @@ export default function BudgetCard({
       : "bg-emerald-50 text-emerald-700";
 
   const category = budget?.category || budget?.name || "General";
+  const budgetId = budget?.id ?? budget?._id;
+
+  const handleEditClick = () => {
+    if (typeof handleEdit === "function") {
+      handleEdit(budget);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    if (typeof handleDelete === "function" && budgetId != null) {
+      handleDelete(budgetId);
+    }
+  };
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-6">
@@ -71,22 +93,22 @@ export default function BudgetCard({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => handleEdit?.(budget)}
+            onClick={handleEditClick}
+            disabled={!handleEdit}
             aria-label={`Edit ${category} budget`}
             title="Edit budget"
-            className="rounded-lg p-2 text-slate-500 transition hover:bg-amber-50 hover:text-amber-700"
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-amber-50 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Pencil size={17} />
           </button>
 
           <button
             type="button"
-            onClick={() =>
-              handleDelete?.(budget.id ?? budget._id)
-            }
+            onClick={handleDeleteClick}
+            disabled={!handleDelete || budgetId == null}
             aria-label={`Delete ${category} budget`}
             title="Delete budget"
-            className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Trash2 size={17} />
           </button>
@@ -125,6 +147,11 @@ export default function BudgetCard({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress)}
+          aria-valuetext={
+            limit > 0
+              ? `${percentage.toFixed(0)}% used`
+              : "No budget limit set"
+          }
         >
           <div
             className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
@@ -134,7 +161,7 @@ export default function BudgetCard({
 
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
           <span className="font-medium text-slate-500">
-            {percentage.toFixed(0)}% used
+            {limit > 0 ? `${percentage.toFixed(0)}% used` : "No limit"}
           </span>
 
           <span className="text-slate-500">

@@ -14,11 +14,14 @@ import {
   CircleHelp,
   Wallet,
   ShieldCheck,
-  FileText,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  FileText,
+  X,
 } from "lucide-react";
+
+const SUPPORT_STORAGE_KEY = "expenseTrackerSupportRequests";
 
 const faqs = [
   {
@@ -51,6 +54,16 @@ const faqs = [
     answer:
       "Use a strong password and sign out on shared devices. Actual data security depends on your application's authentication, backend authorization and database configuration.",
   },
+  {
+    question: "How do I import a bank statement?",
+    answer:
+      "Open Bank Statements or Import Statement, select an account and upload a supported CSV file. Review the preview before importing your transactions.",
+  },
+  {
+    question: "Can I transfer money between bank accounts?",
+    answer:
+      "Open Money Transfers and create a transfer record between your accounts. The current application records transfer details locally; it does not move actual money between bank accounts.",
+  },
 ];
 
 const quickLinks = [
@@ -74,16 +87,36 @@ const quickLinks = [
   },
 ];
 
+function readSupportRequests() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(SUPPORT_STORAGE_KEY) || "[]"
+    );
+
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function HelpSupport() {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
+
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("General question");
   const [email, setEmail] = useState("");
   const [details, setDetails] = useState("");
+
   const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const [showRequests, setShowRequests] = useState(false);
+  const [supportRequests, setSupportRequests] = useState(
+    readSupportRequests
+  );
 
   const filteredFaqs = faqs.filter((faq) =>
     `${faq.question} ${faq.answer}`
@@ -91,11 +124,22 @@ export default function HelpSupport() {
       .includes(search.toLowerCase().trim())
   );
 
+  function showSection(id) {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
   function submitSupportRequest(event) {
     event.preventDefault();
     setStatus(null);
 
-    if (!subject.trim() || !email.trim() || !details.trim()) {
+    const cleanSubject = subject.trim();
+    const cleanEmail = email.trim();
+    const cleanDetails = details.trim();
+
+    if (!cleanSubject || !cleanEmail || !cleanDetails) {
       setStatus({
         type: "error",
         text: "Please fill in your subject, email and message.",
@@ -103,25 +147,53 @@ export default function HelpSupport() {
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setStatus({
+        type: "error",
+        text: "Please enter a valid email address.",
+      });
+      return;
+    }
+
+    if (cleanDetails.length < 10) {
+      setStatus({
+        type: "error",
+        text: "Please describe your issue in at least 10 characters.",
+      });
+      return;
+    }
+
+    if (cleanSubject.length > 120 || cleanDetails.length > 3000) {
+      setStatus({
+        type: "error",
+        text: "Subject or message exceeds the allowed length.",
+      });
+      return;
+    }
+
+    setSaving(true);
+
     const request = {
       id: `support-${Date.now()}`,
-      subject: subject.trim(),
+      subject: cleanSubject,
       category,
-      email: email.trim(),
-      details: details.trim(),
+      email: cleanEmail,
+      details: cleanDetails,
       createdAt: new Date().toISOString(),
       status: "pending",
     };
 
     try {
-      const existing = JSON.parse(
-        localStorage.getItem("expenseTrackerSupportRequests") || "[]"
-      );
+      const existing = readSupportRequests();
+
+      const updated = [request, ...existing];
 
       localStorage.setItem(
-        "expenseTrackerSupportRequests",
-        JSON.stringify([request, ...existing])
+        SUPPORT_STORAGE_KEY,
+        JSON.stringify(updated)
       );
+
+      setSupportRequests(updated);
 
       setStatus({
         type: "success",
@@ -136,6 +208,34 @@ export default function HelpSupport() {
       setStatus({
         type: "error",
         text: "Could not save your request. Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function deleteSupportRequest(id) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this support request?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const updated = supportRequests.filter(
+        (request) => request.id !== id
+      );
+
+      localStorage.setItem(
+        SUPPORT_STORAGE_KEY,
+        JSON.stringify(updated)
+      );
+
+      setSupportRequests(updated);
+    } catch {
+      setStatus({
+        type: "error",
+        text: "Could not delete this request.",
       });
     }
   }
@@ -152,8 +252,10 @@ export default function HelpSupport() {
           Back to Settings
         </button>
 
+        {/* Hero */}
         <section className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-[#03045E] via-[#0D21A1] to-[#2563EB] p-6 text-white sm:p-9">
           <div className="pointer-events-none absolute -right-10 -top-12 h-48 w-48 rounded-full border-[28px] border-white/10" />
+
           <div className="pointer-events-none absolute -bottom-20 right-24 h-44 w-44 rounded-full bg-white/5" />
 
           <div className="relative max-w-2xl">
@@ -176,6 +278,7 @@ export default function HelpSupport() {
 
             <div className="mt-6 flex max-w-xl items-center gap-3 rounded-xl bg-white px-4 py-3 text-slate-500 shadow-lg">
               <Search size={20} className="shrink-0" />
+
               <input
                 type="search"
                 value={search}
@@ -187,24 +290,37 @@ export default function HelpSupport() {
                 aria-label="Search frequently asked questions"
                 className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
               />
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setOpenFaq(0);
+                  }}
+                  aria-label="Clear search"
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100"
+                >
+                  <X size={17} />
+                </button>
+              )}
             </div>
           </div>
         </section>
 
+        {/* Quick actions */}
         <section className="mb-8 grid gap-4 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() =>
-              document
-                .getElementById("faq-section")
-                ?.scrollIntoView({ behavior: "smooth" })
-            }
+            onClick={() => showSection("faq-section")}
             className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
           >
             <div className="mb-4 inline-flex rounded-xl bg-blue-50 p-3 text-blue-800">
               <CircleHelp size={22} />
             </div>
+
             <h2 className="font-bold">FAQs</h2>
+
             <p className="mt-1 text-sm leading-5 text-slate-500">
               Find quick answers to common questions.
             </p>
@@ -212,17 +328,15 @@ export default function HelpSupport() {
 
           <button
             type="button"
-            onClick={() =>
-              document
-                .getElementById("contact-section")
-                ?.scrollIntoView({ behavior: "smooth" })
-            }
+            onClick={() => showSection("contact-section")}
             className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
           >
             <div className="mb-4 inline-flex rounded-xl bg-indigo-50 p-3 text-indigo-800">
               <MessageCircle size={22} />
             </div>
+
             <h2 className="font-bold">Contact support</h2>
+
             <p className="mt-1 text-sm leading-5 text-slate-500">
               Describe your issue using the support form.
             </p>
@@ -232,28 +346,32 @@ export default function HelpSupport() {
             type="button"
             onClick={() => {
               setCategory("Bug report");
-              document
-                .getElementById("contact-section")
-                ?.scrollIntoView({ behavior: "smooth" });
+              showSection("contact-section");
             }}
             className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
           >
             <div className="mb-4 inline-flex rounded-xl bg-amber-50 p-3 text-amber-700">
               <Bug size={22} />
             </div>
+
             <h2 className="font-bold">Report a bug</h2>
+
             <p className="mt-1 text-sm leading-5 text-slate-500">
               Tell us about an error or unexpected behaviour.
             </p>
           </button>
         </section>
 
+        {/* FAQs */}
         <section
           id="faq-section"
-          className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+          className="mb-8 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
         >
           <div className="mb-5">
-            <h2 className="text-xl font-bold">Frequently asked questions</h2>
+            <h2 className="text-xl font-bold">
+              Frequently asked questions
+            </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               Answers to help you use the application.
             </p>
@@ -274,6 +392,7 @@ export default function HelpSupport() {
                     <span className="text-sm font-semibold leading-6 text-slate-800 sm:text-base">
                       {faq.question}
                     </span>
+
                     <ChevronDown
                       size={19}
                       className={`shrink-0 text-slate-500 transition-transform ${
@@ -293,20 +412,35 @@ export default function HelpSupport() {
 
             {filteredFaqs.length === 0 && (
               <div className="py-8 text-center">
-                <Search className="mx-auto mb-3 text-slate-300" size={28} />
+                <Search
+                  className="mx-auto mb-3 text-slate-300"
+                  size={28}
+                />
+
                 <p className="font-semibold text-slate-700">
                   No matching questions
                 </p>
+
                 <p className="mt-1 text-sm text-slate-500">
                   Try another search term or use the support form.
                 </p>
+
+                <button
+                  type="button"
+                  onClick={() => showSection("contact-section")}
+                  className="mt-4 text-sm font-semibold text-blue-800 hover:underline"
+                >
+                  Contact support
+                </button>
               </div>
             )}
           </div>
         </section>
 
+        {/* Quick links */}
         <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h2 className="text-xl font-bold">Quick links</h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Jump directly to useful areas of your application.
           </p>
@@ -322,15 +456,21 @@ export default function HelpSupport() {
                   onClick={() => navigate(link.target)}
                   className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
                 >
-                  <Icon size={20} className="mt-0.5 shrink-0 text-blue-800" />
+                  <Icon
+                    size={20}
+                    className="mt-0.5 shrink-0 text-blue-800"
+                  />
+
                   <div>
                     <p className="font-semibold text-slate-800">
                       {link.title}
                     </p>
+
                     <p className="mt-1 text-xs leading-5 text-slate-500">
                       {link.description}
                     </p>
                   </div>
+
                   <ExternalLink
                     size={14}
                     className="ml-auto shrink-0 text-slate-400"
@@ -341,16 +481,100 @@ export default function HelpSupport() {
           </div>
         </section>
 
+        {/* Support request history */}
+        <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowRequests((current) => !current)}
+            aria-expanded={showRequests}
+            className="flex w-full items-center justify-between gap-3 p-5 text-left sm:p-6"
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-blue-50 p-3 text-blue-800">
+                <FileText size={21} />
+              </div>
+
+              <div>
+                <h2 className="font-bold text-slate-800">
+                  My support requests
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {supportRequests.length} request(s) saved in this browser
+                </p>
+              </div>
+            </div>
+
+            <ChevronDown
+              size={20}
+              className={`shrink-0 text-slate-500 transition-transform ${
+                showRequests ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {showRequests && (
+            <div className="border-t border-slate-100 p-5 sm:p-6">
+              {supportRequests.length === 0 ? (
+                <p className="py-5 text-center text-sm text-slate-500">
+                  You have not submitted any support requests yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {supportRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <h3 className="break-words font-semibold text-slate-800">
+                          {request.subject}
+                        </h3>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {request.category} ·{" "}
+                          {request.createdAt
+                            ? new Date(request.createdAt).toLocaleString()
+                            : "Date unavailable"}
+                        </p>
+
+                        <p className="mt-2 break-words text-sm leading-5 text-slate-600">
+                          {request.details}
+                        </p>
+
+                        <span className="mt-3 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                          Saved locally · Pending
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteSupportRequest(request.id)}
+                        className="self-start text-xs font-semibold text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Contact support */}
         <section
           id="contact-section"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+          className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
         >
           <div className="mb-6 flex items-start gap-3">
             <div className="rounded-xl bg-blue-50 p-3 text-blue-800">
               <Mail size={23} />
             </div>
+
             <div>
               <h2 className="text-xl font-bold">Contact support</h2>
+
               <p className="mt-1 text-sm leading-5 text-slate-500">
                 Fill in the details below to record your support request.
               </p>
@@ -360,6 +584,7 @@ export default function HelpSupport() {
           {status && (
             <div
               role="status"
+              aria-live="polite"
               className={`mb-5 flex items-start gap-2 rounded-xl border p-4 text-sm ${
                 status.type === "success"
                   ? "border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -371,6 +596,7 @@ export default function HelpSupport() {
               ) : (
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
               )}
+
               <span>{status.text}</span>
             </div>
           )}
@@ -384,6 +610,7 @@ export default function HelpSupport() {
                 >
                   Subject
                 </label>
+
                 <input
                   id="support-subject"
                   required
@@ -402,6 +629,7 @@ export default function HelpSupport() {
                 >
                   Request type
                 </label>
+
                 <select
                   id="support-category"
                   value={category}
@@ -425,6 +653,7 @@ export default function HelpSupport() {
               >
                 Email address
               </label>
+
               <input
                 id="support-email"
                 type="email"
@@ -433,7 +662,7 @@ export default function HelpSupport() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
               />
             </div>
 
@@ -444,6 +673,7 @@ export default function HelpSupport() {
               >
                 Describe your issue
               </label>
+
               <textarea
                 id="support-details"
                 required
@@ -455,6 +685,7 @@ export default function HelpSupport() {
                 placeholder="Explain what happened and what you expected..."
                 className="w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
               />
+
               <p className="mt-1 text-right text-xs text-slate-400">
                 {details.length}/3000
               </p>
@@ -462,10 +693,17 @@ export default function HelpSupport() {
 
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 font-semibold text-white transition hover:bg-[#03045E] focus:outline-none focus:ring-4 focus:ring-blue-100 sm:w-auto"
+              disabled={saving}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 font-semibold text-white transition hover:bg-[#03045E] focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
-              <Send size={17} />
-              Save support request
+              {saving ? (
+                "Saving..."
+              ) : (
+                <>
+                  <Send size={17} />
+                  Save support request
+                </>
+              )}
             </button>
 
             <p className="text-xs leading-5 text-slate-400">

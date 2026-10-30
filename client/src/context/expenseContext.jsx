@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -20,6 +19,7 @@ const ExpenseContext = createContext(null);
 function normalizeTransactions(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.transactions)) return data.transactions;
+  if (Array.isArray(data?.data)) return data.data;
   return [];
 }
 
@@ -31,12 +31,16 @@ function getErrorMessage(error, fallback) {
   );
 }
 
+function getTransactionId(transaction) {
+  return transaction?._id ?? transaction?.id ?? null;
+}
+
 export function ExpenseProvider({ children }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch transactions
+  // Fetch transactions from the backend
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -44,49 +48,103 @@ export function ExpenseProvider({ children }) {
     try {
       const data = await getTransactions();
       setTransactions(normalizeTransactions(data));
+      return data;
     } catch (err) {
-      console.error("Fetch transactions failed:", err);
-      setError(
-        getErrorMessage(err, "Unable to load transactions.")
+      const message = getErrorMessage(
+        err,
+        "Unable to load transactions."
       );
+
+      console.error("Fetch transactions failed:", err);
+      setError(message);
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchTransactions();
+    fetchTransactions().catch(() => {
+      // Error is already stored in context.
+    });
   }, [fetchTransactions]);
 
-  // Add transaction
-  const addExpense = useCallback(async (transaction) => {
-    try {
-      const data = await addTransaction(transaction);
-      const newTransaction = data?.transaction ?? data;
+  // Add a transaction
+  const addExpense = useCallback(
+    async (transaction) => {
+      try {
+        const data = await addTransaction(transaction);
+        const newTransaction = data?.transaction ?? data?.data ?? data;
 
-      if (!newTransaction?._id && !newTransaction?.id) {
-        await fetchTransactions();
-      } else {
+        if (!getTransactionId(newTransaction)) {
+          await fetchTransactions();
+          return newTransaction;
+        }
+
         setTransactions((previous) => [
           newTransaction,
-          ...previous,
+          ...previous.filter(
+            (item) =>
+              String(getTransactionId(item)) !==
+              String(getTransactionId(newTransaction))
+          ),
         ]);
+
+        setError("");
+        return newTransaction;
+      } catch (err) {
+        const message = getErrorMessage(
+          err,
+          "Unable to add transaction."
+        );
+
+        setError(message);
+        throw new Error(message);
+      }
+    },
+    [fetchTransactions]
+  );
+
+  // Update a transaction
+  const editExpense = useCallback(
+    async (id, updatedTransaction) => {
+      if (!id) {
+        throw new Error("Transaction ID is missing.");
       }
 
-      setError("");
-      return newTransaction;
-    } catch (err) {
-      const message = getErrorMessage(
-        err,
-        "Unable to add transaction."
-      );
+      try {
+        const data = await updateTransaction(id, updatedTransaction);
+        const updatedItem = data?.transaction ?? data?.data ?? data;
 
-      setError(message);
-      throw new Error(message);
-    }
-  }, [fetchTransactions]);
+        if (!getTransactionId(updatedItem)) {
+          await fetchTransactions();
+          return updatedItem;
+        }
 
-  // Delete transaction
+        setTransactions((previous) =>
+          previous.map((item) =>
+            String(getTransactionId(item)) === String(id)
+              ? updatedItem
+              : item
+          )
+        );
+
+        setError("");
+        return updatedItem;
+      } catch (err) {
+        const message = getErrorMessage(
+          err,
+          "Unable to update transaction."
+        );
+
+        setError(message);
+        throw new Error(message);
+      }
+    },
+    [fetchTransactions]
+  );
+
+  // Delete a transaction
   const removeExpense = useCallback(async (id) => {
     if (!id) {
       throw new Error("Transaction ID is missing.");
@@ -97,7 +155,7 @@ export function ExpenseProvider({ children }) {
 
       setTransactions((previous) =>
         previous.filter(
-          (item) => String(item._id || item.id) !== String(id)
+          (item) => String(getTransactionId(item)) !== String(id)
         )
       );
 
@@ -113,41 +171,6 @@ export function ExpenseProvider({ children }) {
     }
   }, []);
 
-  // Update transaction
-  const editExpense = useCallback(async (id, updatedTransaction) => {
-    if (!id) {
-      throw new Error("Transaction ID is missing.");
-    }
-
-    try {
-      const data = await updateTransaction(id, updatedTransaction);
-      const updatedItem = data?.transaction ?? data;
-
-      if (!updatedItem?._id && !updatedItem?.id) {
-        await fetchTransactions();
-      } else {
-        setTransactions((previous) =>
-          previous.map((item) =>
-            String(item._id || item.id) === String(id)
-              ? updatedItem
-              : item
-          )
-        );
-      }
-
-      setError("");
-      return updatedItem;
-    } catch (err) {
-      const message = getErrorMessage(
-        err,
-        "Unable to update transaction."
-      );
-
-      setError(message);
-      throw new Error(message);
-    }
-  }, [fetchTransactions]);
-
   const value = useMemo(
     () => ({
       transactions,
@@ -155,8 +178,8 @@ export function ExpenseProvider({ children }) {
       error,
       fetchTransactions,
       addExpense,
-      removeExpense,
       editExpense,
+      removeExpense,
     }),
     [
       transactions,
@@ -164,8 +187,8 @@ export function ExpenseProvider({ children }) {
       error,
       fetchTransactions,
       addExpense,
-      removeExpense,
       editExpense,
+      removeExpense,
     ]
   );
 
@@ -181,9 +204,11 @@ export function useExpense() {
 
   if (!context) {
     throw new Error(
-      "useExpense must be used inside an ExpenseProvider"
+      "useExpense must be used inside an ExpenseProvider."
     );
   }
 
   return context;
 }
+
+export default ExpenseContext;

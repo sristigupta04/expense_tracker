@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   Search,
@@ -6,10 +7,25 @@ import {
   ArrowDownUp,
   X,
   RotateCcw,
+  AlertCircle,
 } from "lucide-react";
+
+const DEFAULT_FILTERS = {
+  search: "",
+  type: "all",
+  accountId: "all",
+  startDate: "",
+  endDate: "",
+  minAmount: "",
+  maxAmount: "",
+  sortBy: "newest",
+};
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+
+const labelClass =
+  "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500";
 
 export default function BankTransactionFilters({
   accounts = [],
@@ -19,39 +35,44 @@ export default function BankTransactionFilters({
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const defaultFilters = {
-    search: "",
-    type: "all",
-    accountId: "all",
-    startDate: "",
-    endDate: "",
-    minAmount: "",
-    maxAmount: "",
-    sortBy: "newest",
+  const currentFilters = {
+    ...DEFAULT_FILTERS,
+    ...filters,
   };
 
-  const currentFilters = { ...defaultFilters, ...filters };
-
   const updateFilter = (name, value) => {
-    onFilterChange?.({
+    const updatedFilters = {
       ...currentFilters,
       [name]: value,
-    });
+    };
+
+    onFilterChange?.(updatedFilters);
   };
 
   const resetFilters = () => {
-    onFilterChange?.(defaultFilters);
+    onFilterChange?.({ ...DEFAULT_FILTERS });
     onReset?.();
   };
 
   const activeFilterCount = [
+    Boolean(currentFilters.search),
     currentFilters.type !== "all",
     currentFilters.accountId !== "all",
     Boolean(currentFilters.startDate),
     Boolean(currentFilters.endDate),
-    Boolean(currentFilters.minAmount),
-    Boolean(currentFilters.maxAmount),
+    currentFilters.minAmount !== "",
+    currentFilters.maxAmount !== "",
   ].filter(Boolean).length;
+
+  const hasAmountError =
+    currentFilters.minAmount !== "" &&
+    currentFilters.maxAmount !== "" &&
+    Number(currentFilters.minAmount) > Number(currentFilters.maxAmount);
+
+  const updateAmount = (name, value) => {
+    if (value !== "" && Number(value) < 0) return;
+    updateFilter(name, value);
+  };
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -75,6 +96,7 @@ export default function BankTransactionFilters({
         <button
           type="button"
           onClick={() => setShowAdvanced((previous) => !previous)}
+          aria-expanded={showAdvanced}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
         >
           <SlidersHorizontal size={15} />
@@ -98,7 +120,9 @@ export default function BankTransactionFilters({
         <input
           type="search"
           value={currentFilters.search}
-          onChange={(event) => updateFilter("search", event.target.value)}
+          onChange={(event) =>
+            updateFilter("search", event.target.value)
+          }
           placeholder="Search by description, reference or merchant..."
           className={`${inputClass} pl-10 pr-10`}
           aria-label="Search bank transactions"
@@ -116,20 +140,19 @@ export default function BankTransactionFilters({
         )}
       </div>
 
-      {/* Main filters */}
+      {/* Main Filters */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label
-            htmlFor="bank-transaction-type"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
+          <label htmlFor="bank-transaction-type" className={labelClass}>
             Transaction Type
           </label>
 
           <select
             id="bank-transaction-type"
             value={currentFilters.type}
-            onChange={(event) => updateFilter("type", event.target.value)}
+            onChange={(event) =>
+              updateFilter("type", event.target.value)
+            }
             className={inputClass}
           >
             <option value="all">All Transactions</option>
@@ -140,34 +163,36 @@ export default function BankTransactionFilters({
         </div>
 
         <div>
-          <label
-            htmlFor="bank-transaction-account"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
+          <label htmlFor="bank-transaction-account" className={labelClass}>
             Bank Account
           </label>
 
           <select
             id="bank-transaction-account"
             value={currentFilters.accountId}
-            onChange={(event) => updateFilter("accountId", event.target.value)}
+            onChange={(event) =>
+              updateFilter("accountId", event.target.value)
+            }
             className={inputClass}
           >
             <option value="all">All Accounts</option>
 
-            {accounts.map((account) => (
-              <option key={account.id} value={String(account.id)}>
-                {account.accountName || account.bankName || "Bank Account"}
-              </option>
-            ))}
+            {accounts.map((account) => {
+              const accountId = account.id ?? account._id;
+
+              if (!accountId) return null;
+
+              return (
+                <option key={accountId} value={String(accountId)}>
+                  {account.accountName || account.bankName || "Bank Account"}
+                </option>
+              );
+            })}
           </select>
         </div>
 
         <div>
-          <label
-            htmlFor="bank-transaction-sort"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
+          <label htmlFor="bank-transaction-sort" className={labelClass}>
             Sort By
           </label>
 
@@ -180,7 +205,9 @@ export default function BankTransactionFilters({
             <select
               id="bank-transaction-sort"
               value={currentFilters.sortBy}
-              onChange={(event) => updateFilter("sortBy", event.target.value)}
+              onChange={(event) =>
+                updateFilter("sortBy", event.target.value)
+              }
               className={`${inputClass} pl-10`}
             >
               <option value="newest">Newest First</option>
@@ -192,7 +219,7 @@ export default function BankTransactionFilters({
         </div>
       </div>
 
-      {/* Advanced filters */}
+      {/* Advanced Filters */}
       {showAdvanced && (
         <div className="mt-5 border-t border-slate-100 pt-5">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800">
@@ -202,10 +229,7 @@ export default function BankTransactionFilters({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label
-                htmlFor="bank-transaction-start"
-                className="mb-1.5 block text-xs font-semibold text-slate-500"
-              >
+              <label htmlFor="bank-transaction-start" className={labelClass}>
                 From Date
               </label>
 
@@ -222,10 +246,7 @@ export default function BankTransactionFilters({
             </div>
 
             <div>
-              <label
-                htmlFor="bank-transaction-end"
-                className="mb-1.5 block text-xs font-semibold text-slate-500"
-              >
+              <label htmlFor="bank-transaction-end" className={labelClass}>
                 To Date
               </label>
 
@@ -242,10 +263,7 @@ export default function BankTransactionFilters({
             </div>
 
             <div>
-              <label
-                htmlFor="bank-transaction-min"
-                className="mb-1.5 block text-xs font-semibold text-slate-500"
-              >
+              <label htmlFor="bank-transaction-min" className={labelClass}>
                 Minimum Amount
               </label>
 
@@ -257,17 +275,14 @@ export default function BankTransactionFilters({
                 placeholder="₹ 0.00"
                 value={currentFilters.minAmount}
                 onChange={(event) =>
-                  updateFilter("minAmount", event.target.value)
+                  updateAmount("minAmount", event.target.value)
                 }
                 className={inputClass}
               />
             </div>
 
             <div>
-              <label
-                htmlFor="bank-transaction-max"
-                className="mb-1.5 block text-xs font-semibold text-slate-500"
-              >
+              <label htmlFor="bank-transaction-max" className={labelClass}>
                 Maximum Amount
               </label>
 
@@ -279,12 +294,19 @@ export default function BankTransactionFilters({
                 placeholder="₹ 10,000"
                 value={currentFilters.maxAmount}
                 onChange={(event) =>
-                  updateFilter("maxAmount", event.target.value)
+                  updateAmount("maxAmount", event.target.value)
                 }
                 className={inputClass}
               />
             </div>
           </div>
+
+          {hasAmountError && (
+            <p className="mt-3 flex items-center gap-2 text-xs text-red-600">
+              <AlertCircle size={14} />
+              Minimum amount cannot exceed maximum amount.
+            </p>
+          )}
         </div>
       )}
 

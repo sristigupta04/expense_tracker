@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import {
   Wallet,
   Building2,
@@ -22,9 +23,22 @@ const initialFormData = {
 };
 
 const inputClass =
-  "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+  "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70";
 
 const labelClass = "text-sm font-semibold text-slate-700";
+
+const normalizeFormData = (data = {}) => ({
+  ...initialFormData,
+  ...data,
+  accountName: data.accountName ?? "",
+  bankName: data.bankName ?? "",
+  accountNumber: data.accountNumber ?? "",
+  openingBalance:
+    data.openingBalance !== undefined && data.openingBalance !== null
+      ? String(data.openingBalance)
+      : "0",
+  notes: data.notes ?? "",
+});
 
 export default function AccountForm({
   initialData = {},
@@ -32,16 +46,17 @@ export default function AccountForm({
   submitLabel = "Save Account",
   loading = false,
 }) {
-  const [formData, setFormData] = useState({
-    ...initialFormData,
-    ...initialData,
-    openingBalance:
-      initialData.openingBalance !== undefined
-        ? String(initialData.openingBalance)
-        : initialFormData.openingBalance,
-  });
-
+  const [formData, setFormData] = useState(() =>
+    normalizeFormData(initialData)
+  );
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    setFormData(normalizeFormData(initialData));
+    setErrors({});
+    setSubmitError("");
+  }, [initialData]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -55,44 +70,54 @@ export default function AccountForm({
       ...previous,
       [name]: "",
     }));
+
+    setSubmitError("");
   };
 
   const validateForm = () => {
     const newErrors = {};
+    const accountNumber = formData.accountNumber.replace(/\s/g, "");
+    const balance = Number(formData.openingBalance);
 
     if (!formData.accountName.trim()) {
       newErrors.accountName = "Account name is required.";
+    } else if (formData.accountName.trim().length > 60) {
+      newErrors.accountName = "Account name must be under 60 characters.";
     }
 
     if (!formData.bankName.trim()) {
       newErrors.bankName = "Bank name is required.";
+    } else if (formData.bankName.trim().length > 60) {
+      newErrors.bankName = "Bank name must be under 60 characters.";
     }
 
-    if (
-      formData.accountNumber &&
-      !/^\d{4,20}$/.test(formData.accountNumber.replace(/\s/g, ""))
-    ) {
+    if (accountNumber && !/^\d{4,20}$/.test(accountNumber)) {
       newErrors.accountNumber =
         "Enter 4–20 digits, without letters or symbols.";
     }
 
     if (
       formData.openingBalance.trim() === "" ||
-      !Number.isFinite(Number(formData.openingBalance)) ||
-      Number(formData.openingBalance) < 0
+      !Number.isFinite(balance) ||
+      balance < 0 ||
+      !/^\d+(\.\d{1,2})?$/.test(formData.openingBalance.trim())
     ) {
-      newErrors.openingBalance =
-        "Enter a valid balance greater than or equal to zero.";
+      newErrors.openingBalance = "Enter a valid non-negative balance (up to 2 decimal places).";
+    }
+
+    if (formData.notes.length > 500) {
+      newErrors.notes = "Notes cannot exceed 500 characters.";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitError("");
 
-    if (!validateForm()) return;
+    if (!validateForm() || loading) return;
 
     const payload = {
       ...formData,
@@ -100,32 +125,44 @@ export default function AccountForm({
       bankName: formData.bankName.trim(),
       accountNumber: formData.accountNumber.replace(/\s/g, ""),
       openingBalance: Number(formData.openingBalance),
+      notes: formData.notes.trim(),
     };
 
-    onSubmit?.(payload);
+    try {
+      await onSubmit?.(payload);
+    } catch (error) {
+      setSubmitError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to save account. Please try again."
+      );
+    }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...initialFormData,
-      ...initialData,
-      openingBalance:
-        initialData.openingBalance !== undefined
-          ? String(initialData.openingBalance)
-          : "0",
-    });
+    setFormData(normalizeFormData(initialData));
     setErrors({});
+    setSubmitError("");
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      {/* Account information */}
+      {submitError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          <AlertCircle size={17} className="mt-0.5 shrink-0" />
+          {submitError}
+        </div>
+      )}
+
+      {/* Account Information */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
             <Wallet size={20} />
           </div>
-
           <div>
             <h2 className="font-bold text-slate-900">
               Account Information
@@ -141,17 +178,17 @@ export default function AccountForm({
             <label htmlFor="accountName" className={labelClass}>
               Account Name <span className="text-red-500">*</span>
             </label>
-
             <input
               id="accountName"
               name="accountName"
               value={formData.accountName}
               onChange={handleChange}
               placeholder="e.g. Personal Savings"
+              maxLength={60}
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.accountName)}
             />
-
             {errors.accountName && (
               <ErrorMessage message={errors.accountName} />
             )}
@@ -161,7 +198,6 @@ export default function AccountForm({
             <label htmlFor="bankName" className={labelClass}>
               Bank Name <span className="text-red-500">*</span>
             </label>
-
             <div className="relative">
               <Building2
                 size={17}
@@ -173,11 +209,12 @@ export default function AccountForm({
                 value={formData.bankName}
                 onChange={handleChange}
                 placeholder="e.g. State Bank of India"
+                maxLength={60}
+                disabled={loading}
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.bankName)}
               />
             </div>
-
             {errors.bankName && (
               <ErrorMessage message={errors.bankName} />
             )}
@@ -187,12 +224,12 @@ export default function AccountForm({
             <label htmlFor="accountType" className={labelClass}>
               Account Type
             </label>
-
             <select
               id="accountType"
               name="accountType"
               value={formData.accountType}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="Savings">Savings Account</option>
@@ -208,7 +245,6 @@ export default function AccountForm({
             <label htmlFor="accountNumber" className={labelClass}>
               Account Number
             </label>
-
             <div className="relative">
               <CreditCard
                 size={17}
@@ -222,15 +258,15 @@ export default function AccountForm({
                 placeholder="Enter account number"
                 inputMode="numeric"
                 autoComplete="off"
+                maxLength={24}
+                disabled={loading}
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.accountNumber)}
               />
             </div>
-
             <p className="mt-1.5 text-xs text-slate-400">
               Only enter details you need to identify the account.
             </p>
-
             {errors.accountNumber && (
               <ErrorMessage message={errors.accountNumber} />
             )}
@@ -238,13 +274,12 @@ export default function AccountForm({
         </div>
       </section>
 
-      {/* Balance and preferences */}
+      {/* Balance and Preferences */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
             <IndianRupee size={20} />
           </div>
-
           <div>
             <h2 className="font-bold text-slate-900">
               Balance & Preferences
@@ -260,7 +295,6 @@ export default function AccountForm({
             <label htmlFor="openingBalance" className={labelClass}>
               Opening Balance <span className="text-red-500">*</span>
             </label>
-
             <input
               id="openingBalance"
               name="openingBalance"
@@ -270,10 +304,10 @@ export default function AccountForm({
               value={formData.openingBalance}
               onChange={handleChange}
               placeholder="0.00"
+              disabled={loading}
               className={inputClass}
               aria-invalid={Boolean(errors.openingBalance)}
             />
-
             {errors.openingBalance && (
               <ErrorMessage message={errors.openingBalance} />
             )}
@@ -283,12 +317,12 @@ export default function AccountForm({
             <label htmlFor="currency" className={labelClass}>
               Currency
             </label>
-
             <select
               id="currency"
               name="currency"
               value={formData.currency}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="INR">INR — Indian Rupee (₹)</option>
@@ -302,12 +336,12 @@ export default function AccountForm({
             <label htmlFor="status" className={labelClass}>
               Account Status
             </label>
-
             <select
               id="status"
               name="status"
               value={formData.status}
               onChange={handleChange}
+              disabled={loading}
               className={inputClass}
             >
               <option value="Active">Active</option>
@@ -318,15 +352,16 @@ export default function AccountForm({
         </div>
       </section>
 
-      {/* Notes */}
+      {/* Additional Notes */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
             <FileText size={20} />
           </div>
-
           <div>
-            <h2 className="font-bold text-slate-900">Additional Notes</h2>
+            <h2 className="font-bold text-slate-900">
+              Additional Notes
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Add an optional description for your reference.
             </p>
@@ -337,7 +372,6 @@ export default function AccountForm({
           <label htmlFor="notes" className={labelClass}>
             Notes <span className="font-normal text-slate-400">(Optional)</span>
           </label>
-
           <textarea
             id="notes"
             name="notes"
@@ -346,16 +380,24 @@ export default function AccountForm({
             rows={3}
             maxLength={500}
             placeholder="Add a note about this account..."
+            disabled={loading}
             className={`${inputClass} resize-y`}
+            aria-invalid={Boolean(errors.notes)}
           />
-
-          <p className="mt-1 text-right text-xs text-slate-400">
-            {formData.notes.length}/500
-          </p>
+          <div className="mt-1 flex justify-between">
+            {errors.notes ? (
+              <ErrorMessage message={errors.notes} />
+            ) : (
+              <span />
+            )}
+            <p className="text-xs text-slate-400">
+              {formData.notes.length}/500
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* Form actions */}
+      {/* Form Actions */}
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"

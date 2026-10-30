@@ -1,9 +1,10 @@
 
 export default function Loader({
   size = "h-7 w-7",
-  color = "border-blue-600",
+  color = "border-blue-700",
   text = "",
   fullScreen = false,
+  className = "",
 }) {
   return (
     <div
@@ -11,15 +12,17 @@ export default function Loader({
         fullScreen
           ? "fixed inset-0 z-[100] min-h-screen bg-white/80 backdrop-blur-sm"
           : "py-3"
-      }`}
+      } ${className}`}
       role="status"
       aria-live="polite"
     >
+      {/* Spinner */}
       <div
         className={`${size} shrink-0 animate-spin rounded-full border-[3px] ${color} border-t-transparent`}
         aria-hidden="true"
       />
 
+      {/* Loading text */}
       {text && (
         <span className="text-sm font-medium text-slate-600">
           {text}

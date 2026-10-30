@@ -31,21 +31,6 @@ const defaultNotifications = {
   browserNotifications: false,
 };
 
-function readNotifications() {
-  try {
-    const saved = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) || "{}"
-    );
-
-    return {
-      ...defaultNotifications,
-      ...(saved.notifications || {}),
-    };
-  } catch {
-    return { ...defaultNotifications };
-  }
-}
-
 const notificationGroups = [
   {
     title: "Spending & budgets",
@@ -109,6 +94,21 @@ const notificationGroups = [
   },
 ];
 
+function readNotifications() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}"
+    );
+
+    return {
+      ...defaultNotifications,
+      ...(saved.notifications || {}),
+    };
+  } catch {
+    return { ...defaultNotifications };
+  }
+}
+
 function Toggle({ checked, onChange, label, disabled = false }) {
   return (
     <button
@@ -136,14 +136,16 @@ export default function NotificationSettings() {
 
   const [notifications, setNotifications] = useState(readNotifications);
   const [original, setOriginal] = useState(readNotifications);
+
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("success");
+
   const [permission, setPermission] = useState(() =>
-    typeof window !== "undefined" &&
-    "Notification" in window
+    typeof window !== "undefined" && "Notification" in window
       ? Notification.permission
       : "unsupported"
   );
+
   const [requestingPermission, setRequestingPermission] = useState(false);
 
   const dirty =
@@ -161,11 +163,17 @@ export default function NotificationSettings() {
     }
   }, [notifications.browserNotifications]);
 
+  function showMessage(text, type = "success") {
+    setMessage(text);
+    setMessageType(type);
+  }
+
   function update(key, value) {
     setNotifications((current) => ({
       ...current,
       [key]: value,
     }));
+
     setMessage("");
   }
 
@@ -179,8 +187,10 @@ export default function NotificationSettings() {
       typeof window === "undefined" ||
       !("Notification" in window)
     ) {
-      setMessage("This browser does not support web notifications.");
-      setMessageType("error");
+      showMessage(
+        "This browser does not support web notifications.",
+        "error"
+      );
       return;
     }
 
@@ -192,10 +202,12 @@ export default function NotificationSettings() {
 
     if (Notification.permission === "denied") {
       setPermission("denied");
-      setMessage(
-        "Browser notifications are blocked. Change this website's notification permission in your browser settings."
+
+      showMessage(
+        "Browser notifications are blocked. Change this website's notification permission in your browser settings.",
+        "error"
       );
-      setMessageType("error");
+
       return;
     }
 
@@ -203,26 +215,30 @@ export default function NotificationSettings() {
 
     try {
       const result = await Notification.requestPermission();
+
       setPermission(result);
 
       if (result === "granted") {
         update("browserNotifications", true);
-        setMessage(
+
+        showMessage(
           "Browser permission granted. Save your preferences to keep this setting."
         );
-        setMessageType("success");
       } else {
         update("browserNotifications", false);
-        setMessage(
+
+        showMessage(
           result === "denied"
             ? "Notifications were blocked in your browser."
-            : "Notification permission was not granted."
+            : "Notification permission was not granted.",
+          "error"
         );
-        setMessageType("error");
       }
     } catch {
-      setMessage("Could not request browser notification permission.");
-      setMessageType("error");
+      showMessage(
+        "Could not request browser notification permission.",
+        "error"
+      );
     } finally {
       setRequestingPermission(false);
     }
@@ -240,16 +256,18 @@ export default function NotificationSettings() {
         STORAGE_KEY,
         JSON.stringify({
           ...existing,
-          notifications,
+          notifications: { ...notifications },
         })
       );
 
-      setOriginal(notifications);
-      setMessage("Notification preferences saved successfully.");
-      setMessageType("success");
+      setOriginal({ ...notifications });
+
+      showMessage("Notification preferences saved successfully.");
     } catch {
-      setMessage("Could not save preferences in this browser.");
-      setMessageType("error");
+      showMessage(
+        "Could not save preferences in this browser.",
+        "error"
+      );
     }
   }
 
@@ -258,31 +276,43 @@ export default function NotificationSettings() {
     setMessage("");
   }
 
+  function discardChanges() {
+    setNotifications({ ...original });
+    setMessage("");
+  }
+
   function testBrowserNotification() {
     if (
       typeof window === "undefined" ||
       !("Notification" in window)
     ) {
-      setMessage("This browser does not support notifications.");
-      setMessageType("error");
+      showMessage(
+        "This browser does not support notifications.",
+        "error"
+      );
       return;
     }
 
     if (Notification.permission !== "granted") {
-      setMessage("Enable browser notifications and grant permission first.");
-      setMessageType("error");
+      showMessage(
+        "Enable browser notifications and grant permission first.",
+        "error"
+      );
       return;
     }
 
     try {
       new Notification("Expense Tracker", {
         body: "Browser notifications are working on this device.",
+        icon: "/favicon.ico",
       });
-      setMessage("Test notification sent to your browser.");
-      setMessageType("success");
+
+      showMessage("Test notification sent to your browser.");
     } catch {
-      setMessage("Unable to show a test notification.");
-      setMessageType("error");
+      showMessage(
+        "Unable to show a test notification.",
+        "error"
+      );
     }
   }
 
@@ -328,6 +358,7 @@ export default function NotificationSettings() {
             ) : (
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             )}
+
             <span>{message}</span>
           </div>
         )}
@@ -339,9 +370,11 @@ export default function NotificationSettings() {
                 <div className="mb-3 inline-flex rounded-xl bg-white/15 p-3">
                   <BellRing size={25} />
                 </div>
+
                 <h2 className="text-lg font-bold">
                   Your notification preferences
                 </h2>
+
                 <p className="mt-1 text-sm leading-5 text-blue-100">
                   Manage alerts that help you stay on top of your finances.
                 </p>
@@ -357,6 +390,7 @@ export default function NotificationSettings() {
           <div className="p-5 sm:p-6">
             <div className="flex items-start gap-3">
               <Info size={19} className="mt-0.5 shrink-0 text-blue-700" />
+
               <p className="text-sm leading-6 text-slate-600">
                 These switches save your preferences. Automatic budget alerts,
                 scheduled reminders and email delivery require notification
@@ -374,6 +408,7 @@ export default function NotificationSettings() {
             >
               <div className="border-b border-slate-100 py-5">
                 <h2 className="text-lg font-bold">{group.title}</h2>
+
                 <p className="mt-1 text-sm text-slate-500">
                   {group.description}
                 </p>
@@ -398,6 +433,7 @@ export default function NotificationSettings() {
                         <h3 className="font-semibold text-slate-800">
                           {item.title}
                         </h3>
+
                         <p className="mt-1 max-w-lg text-sm leading-5 text-slate-500">
                           {item.description}
                         </p>
@@ -449,11 +485,16 @@ export default function NotificationSettings() {
 
           <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
             <div className="flex items-start gap-3">
-              <ShieldCheck size={21} className="mt-0.5 shrink-0 text-blue-800" />
+              <ShieldCheck
+                size={21}
+                className="mt-0.5 shrink-0 text-blue-800"
+              />
+
               <div>
                 <h2 className="font-bold text-slate-800">
                   Notification privacy
                 </h2>
+
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   Notification preferences are stored in this browser. Email
                   updates are not sent just because the email switch is on.
@@ -464,15 +505,29 @@ export default function NotificationSettings() {
           </section>
 
           <div className="flex flex-col-reverse gap-3 pb-4 sm:flex-row sm:justify-between">
-            <button
-              type="button"
-              onClick={resetNotifications}
-              disabled={!dirty}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw size={16} />
-              Reset changes
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={resetNotifications}
+                disabled={
+                  JSON.stringify(notifications) ===
+                  JSON.stringify(defaultNotifications)
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw size={16} />
+                Reset to default
+              </button>
+
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={!dirty}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Discard changes
+              </button>
+            </div>
 
             <button
               type="submit"

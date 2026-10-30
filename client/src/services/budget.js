@@ -1,15 +1,18 @@
-
 import api from "./api";
 
+// Validate MongoDB ObjectId
+const isValidId = (id) =>
+  typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
+
 // Get all budgets
-export const getBudgets = async () => {
-  const { data } = await api.get("/budget");
+export const getBudgets = async (params = {}) => {
+  const { data } = await api.get("/budget", { params });
   return data;
 };
 
-// Create a new budget
+// Create a budget
 export const createBudget = async (budget) => {
-  if (!budget || typeof budget !== "object") {
+  if (!budget || typeof budget !== "object" || Array.isArray(budget)) {
     throw new Error("Valid budget details are required.");
   }
 
@@ -17,26 +20,33 @@ export const createBudget = async (budget) => {
   return data;
 };
 
-// Update an existing budget
+// Update a budget
 export const updateBudget = async (id, budget) => {
-  if (!id) {
-    throw new Error("Budget ID is required to update a budget.");
+  if (!isValidId(id)) {
+    throw new Error("A valid budget ID is required.");
   }
 
-  if (!budget || typeof budget !== "object") {
+  if (!budget || typeof budget !== "object" || Array.isArray(budget)) {
     throw new Error("Valid budget details are required.");
   }
 
-  const { data } = await api.put(`/budget/${id}`, budget);
+  const { data } = await api.put(
+    `/budget/${encodeURIComponent(id)}`,
+    budget
+  );
+
   return data;
 };
 
-// Delete an existing budget
+// Delete a budget
 export const deleteBudget = async (id) => {
-  if (!id) {
-    throw new Error("Budget ID is required to delete a budget.");
+  if (!isValidId(id)) {
+    throw new Error("A valid budget ID is required.");
   }
 
-  const { data } = await api.delete(`/budget/${id}`);
+  const { data } = await api.delete(
+    `/budget/${encodeURIComponent(id)}`
+  );
+
   return data;
 };

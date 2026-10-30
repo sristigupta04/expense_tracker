@@ -1,3 +1,4 @@
+
 import {
   CheckCircle2,
   AlertCircle,
@@ -10,22 +11,33 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
 const formatCurrency = (amount, currency = "INR") => {
+  const value = toNumber(amount);
+
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(value);
   } catch {
-    return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+    return `₹${value.toLocaleString("en-IN")}`;
   }
 };
 
 const formatDate = (date) => {
   if (!date) return "—";
 
-  const parsed = new Date(date);
+  // Avoid timezone shifts for date-only values.
+  const value = String(date);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(date);
 
   if (Number.isNaN(parsed.getTime())) return "—";
 
@@ -59,35 +71,42 @@ const statusConfig = {
   },
 };
 
-const normalizeStatus = (transaction) => {
+const normalizeStatus = (transaction = {}) => {
   const rawStatus = String(
-    transaction.matchStatus || transaction.reconciliationStatus || transaction.status || ""
+    transaction.matchStatus ||
+      transaction.reconciliationStatus ||
+      transaction.status ||
+      ""
   )
     .toLowerCase()
     .replace(/_/g, "-")
     .trim();
 
-  if (["matched", "reconciled", "match"].includes(rawStatus)) {
+  if (["matched", "reconciled", "match", "completed"].includes(rawStatus)) {
     return "matched";
   }
 
-  if (["bank-only", "bank only", "missing-in-app"].includes(rawStatus)) {
+  if (
+    ["bank-only", "bank only", "missing-in-app", "missing-in-system"].includes(
+      rawStatus
+    )
+  ) {
     return "bank-only";
   }
 
-  if (["app-only", "app only", "missing-in-bank"].includes(rawStatus)) {
+  if (
+    ["app-only", "app only", "missing-in-bank", "missing-in-statement"].includes(
+      rawStatus
+    )
+  ) {
     return "app-only";
-  }
-
-  if (["unmatched", "pending", "discrepancy"].includes(rawStatus)) {
-    return "unmatched";
   }
 
   return "unmatched";
 };
 
 const getBankAmount = (transaction) =>
-  Number(
+  toNumber(
     transaction.bankAmount ??
       transaction.statementAmount ??
       transaction.bankTransaction?.amount ??
@@ -95,12 +114,27 @@ const getBankAmount = (transaction) =>
   );
 
 const getAppAmount = (transaction) =>
-  Number(
+  toNumber(
     transaction.appAmount ??
       transaction.transactionAmount ??
       transaction.appTransaction?.amount ??
       0
   );
+
+const getDescription = (transaction) =>
+  transaction.description ||
+  transaction.narration ||
+  transaction.merchant ||
+  transaction.bankTransaction?.description ||
+  transaction.appTransaction?.description ||
+  "Transaction";
+
+const getReference = (transaction, fallback = "") =>
+  transaction.referenceNumber ||
+  transaction.reference ||
+  transaction.bankTransaction?.reference ||
+  transaction.appTransaction?.reference ||
+  fallback;
 
 export default function ReconciliationTable({
   transactions = [],
@@ -112,23 +146,23 @@ export default function ReconciliationTable({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const safeTransactions = Array.isArray(transactions)
+    ? transactions.filter(
+        (transaction) =>
+          transaction && typeof transaction === "object"
+      )
+    : [];
+
   const filteredTransactions = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return transactions.filter((transaction) => {
+    return safeTransactions.filter((transaction) => {
       const status = normalizeStatus(transaction);
-
-      const description =
-        transaction.description ||
-        transaction.narration ||
-        transaction.merchant ||
-        "";
-
-      const reference =
-        transaction.referenceNumber ||
-        transaction.reference ||
-        transaction.id ||
-        "";
+      const description = getDescription(transaction);
+      const reference = getReference(
+        transaction,
+        transaction.id ?? transaction._id ?? ""
+      );
 
       const matchesSearch =
         !query ||
@@ -140,11 +174,16 @@ export default function ReconciliationTable({
 
       return matchesSearch && matchesStatus;
     });
-  }, [transactions, search, statusFilter]);
+  }, [safeTransactions, search, statusFilter]);
 
   const matchedCount = filteredTransactions.filter(
     (transaction) => normalizeStatus(transaction) === "matched"
   ).length;
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
 
   if (loading) {
     return (
@@ -169,6 +208,7 @@ export default function ReconciliationTable({
             <h2 className="text-lg font-bold text-slate-900">
               Reconciliation Transactions
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               Compare bank statement entries against app records.
             </p>
@@ -231,16 +271,15 @@ export default function ReconciliationTable({
           </h3>
 
           <p className="mt-1 max-w-sm text-sm text-slate-500">
-            Try another search term or select a different reconciliation status.
+            {safeTransactions.length === 0
+              ? "Import a bank statement or add transactions to start reconciliation."
+              : "Try another search term or select a different reconciliation status."}
           </p>
 
           {(search || statusFilter !== "all") && (
             <button
               type="button"
-              onClick={() => {
-                setSearch("");
-                setStatusFilter("all");
-              }}
+              onClick={clearFilters}
               className="mt-4 rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
             >
               Clear filters
@@ -282,19 +321,13 @@ export default function ReconciliationTable({
                 {filteredTransactions.map((transaction, index) => {
                   const status = normalizeStatus(transaction);
                   const config = statusConfig[status];
-                  const StatusIcon = config.icon;
-
                   const bankAmount = getBankAmount(transaction);
                   const appAmount = getAppAmount(transaction);
                   const difference = bankAmount - appAmount;
 
-                  const description =
-                    transaction.description ||
-                    transaction.narration ||
-                    transaction.merchant ||
-                    "Transaction";
-
-                  const id = transaction.id ?? transaction._id ?? index;
+                  const description = getDescription(transaction);
+                  const id =
+                    transaction.id ?? transaction._id ?? `row-${index}`;
 
                   return (
                     <tr
@@ -303,19 +336,19 @@ export default function ReconciliationTable({
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.styles}`}>
-                            <StatusIcon size={19} />
+                          <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.styles}`}
+                          >
+                            <config.icon size={19} />
                           </div>
 
                           <div className="min-w-0">
                             <p className="max-w-[230px] truncate text-sm font-semibold text-slate-800">
                               {description}
                             </p>
+
                             <p className="mt-1 text-xs text-slate-400">
-                              Ref:{" "}
-                              {transaction.referenceNumber ||
-                                transaction.reference ||
-                                id}
+                              Ref: {getReference(transaction, id)}
                             </p>
                           </div>
                         </div>
@@ -342,12 +375,17 @@ export default function ReconciliationTable({
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-right">
-                        <span className={`text-sm font-bold ${
-                          Math.abs(difference) < 0.01
-                            ? "text-emerald-700"
-                            : "text-amber-700"
-                        }`}>
-                          {formatCurrency(Math.abs(difference), currency)}
+                        <span
+                          className={`text-sm font-bold ${
+                            Math.abs(difference) < 0.01
+                              ? "text-emerald-700"
+                              : "text-amber-700"
+                          }`}
+                        >
+                          {formatCurrency(
+                            Math.abs(difference),
+                            currency
+                          )}
                         </span>
                       </td>
 
@@ -379,18 +417,16 @@ export default function ReconciliationTable({
               const appAmount = getAppAmount(transaction);
               const difference = bankAmount - appAmount;
 
-              const description =
-                transaction.description ||
-                transaction.narration ||
-                transaction.merchant ||
-                "Transaction";
-
-              const id = transaction.id ?? transaction._id ?? index;
+              const description = getDescription(transaction);
+              const id =
+                transaction.id ?? transaction._id ?? `row-${index}`;
 
               return (
                 <article key={id} className="p-4 sm:p-5">
                   <div className="flex items-start gap-3">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.styles}`}>
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.styles}`}
+                    >
                       <config.icon size={19} />
                     </div>
 
@@ -400,6 +436,7 @@ export default function ReconciliationTable({
                           <h3 className="break-words text-sm font-semibold text-slate-800">
                             {description}
                           </h3>
+
                           <p className="mt-1 text-xs text-slate-400">
                             {formatDate(
                               transaction.date ||
@@ -435,22 +472,25 @@ export default function ReconciliationTable({
                           <span className="text-xs text-slate-500">
                             Difference
                           </span>
-                          <span className={`text-sm font-bold ${
-                            Math.abs(difference) < 0.01
-                              ? "text-emerald-700"
-                              : "text-amber-700"
-                          }`}>
-                            {formatCurrency(Math.abs(difference), currency)}
+
+                          <span
+                            className={`text-sm font-bold ${
+                              Math.abs(difference) < 0.01
+                                ? "text-emerald-700"
+                                : "text-amber-700"
+                            }`}
+                          >
+                            {formatCurrency(
+                              Math.abs(difference),
+                              currency
+                            )}
                           </span>
                         </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs text-slate-400">
-                          Ref:{" "}
-                          {transaction.referenceNumber ||
-                            transaction.reference ||
-                            id}
+                        <span className="break-all text-xs text-slate-400">
+                          Ref: {getReference(transaction, id)}
                         </span>
 
                         <ActionButtons
@@ -472,7 +512,7 @@ export default function ReconciliationTable({
       {/* Footer */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-3">
         <p className="text-xs text-slate-500">
-          Showing {filteredTransactions.length} of {transactions.length} transactions
+          Showing {filteredTransactions.length} of {safeTransactions.length} transactions
         </p>
 
         <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -488,7 +528,9 @@ function StatusBadge({ config }) {
   const Icon = config.icon;
 
   return (
-    <span className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${config.styles}`}>
+    <span
+      className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${config.styles}`}
+    >
       <Icon size={13} />
       {config.label}
     </span>

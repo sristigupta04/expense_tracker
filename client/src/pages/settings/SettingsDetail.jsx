@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   UserRound,
@@ -21,6 +21,8 @@ import {
   MessageCircle,
   AlertTriangle,
   CheckCircle2,
+  Phone,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 const STORAGE_KEY = "expenseTrackerSettings";
@@ -81,19 +83,28 @@ const pageInfo = {
 
 function readSettings() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const saved = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}"
+    );
 
     return {
       ...defaultSettings,
       ...saved,
-      profile: { ...defaultSettings.profile, ...saved.profile },
+      profile: {
+        ...defaultSettings.profile,
+        ...(saved.profile || {}),
+      },
       notifications: {
         ...defaultSettings.notifications,
-        ...saved.notifications,
+        ...(saved.notifications || {}),
       },
     };
   } catch {
-    return defaultSettings;
+    return {
+      ...defaultSettings,
+      profile: { ...defaultSettings.profile },
+      notifications: { ...defaultSettings.notifications },
+    };
   }
 }
 
@@ -101,9 +112,10 @@ function SettingRow({ icon: Icon, title, description, children }) {
   return (
     <div className="flex flex-col gap-4 border-b border-slate-100 py-5 last:border-0 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <div className="rounded-xl bg-blue-50 p-2.5 text-blue-800">
+        <div className="rounded-xl bg-blue-50 p-2.5 text-[#0D21A1]">
           <Icon size={20} />
         </div>
+
         <div>
           <h3 className="font-semibold text-slate-800">{title}</h3>
           <p className="mt-1 max-w-lg text-sm leading-5 text-slate-500">
@@ -111,6 +123,7 @@ function SettingRow({ icon: Icon, title, description, children }) {
           </p>
         </div>
       </div>
+
       <div className="sm:shrink-0">{children}</div>
     </div>
   );
@@ -125,7 +138,7 @@ function Toggle({ checked, onChange, label }) {
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 rounded-full transition ${
-        checked ? "bg-blue-700" : "bg-slate-300"
+        checked ? "bg-[#0D21A1]" : "bg-slate-300"
       }`}
     >
       <span
@@ -137,16 +150,25 @@ function Toggle({ checked, onChange, label }) {
   );
 }
 
-function Field({ label, ...props }) {
+function Field({ label, error, ...props }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-700">
+      <span className="mb-2 block text-sm font-semibold text-slate-700">
         {label}
       </span>
+
       <input
         {...props}
-        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+        className={`w-full rounded-xl border bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 ${
+          error ? "border-rose-400" : "border-slate-200"
+        }`}
       />
+
+      {error && (
+        <span className="mt-1.5 block text-xs text-rose-600">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
@@ -156,44 +178,38 @@ export default function SettingsDetail() {
   const navigate = useNavigate();
 
   const [settings, setSettings] = useState(readSettings);
+  const [profile, setProfile] = useState(() => readSettings().profile);
   const [message, setMessage] = useState("");
-  const [profile, setProfile] = useState(() => {
-    const saved = readSettings();
-    return saved.profile;
-  });
+  const [messageType, setMessageType] = useState("success");
+  const [profileErrors, setProfileErrors] = useState({});
 
   const page = pageInfo[section];
+  const PageIcon = page?.icon;
 
   useEffect(() => {
+    const saved = readSettings();
+
+    setSettings(saved);
+    setProfile(saved.profile);
     setMessage("");
-    setSettings(readSettings());
-    setProfile(readSettings().profile);
+    setProfileErrors({});
   }, [section]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
 
-  if (!page) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8">
-          <h1 className="text-xl font-bold">Settings page not found</h1>
-          <button
-            onClick={() => navigate("/settings")}
-            className="mt-4 font-semibold text-blue-700"
-          >
-            Back to Settings
-          </button>
-        </div>
-      </div>
-    );
+  function showMessage(text, type = "success") {
+    setMessage(text);
+    setMessageType(type);
   }
 
-  const PageIcon = page.icon;
-
   function updateSetting(key, value) {
-    setSettings((current) => ({ ...current, [key]: value }));
+    setSettings((current) => ({
+      ...current,
+      [key]: value,
+    }));
+
     setMessage("");
   }
 
@@ -205,79 +221,167 @@ export default function SettingsDetail() {
         [key]: value,
       },
     }));
+
     setMessage("");
+  }
+
+  function validateProfile() {
+    const errors = {};
+
+    if (!profile.name.trim()) {
+      errors.name = "Full name is required.";
+    }
+
+    if (!profile.email.trim()) {
+      errors.email = "Email address is required.";
+    } else if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email.trim())
+    ) {
+      errors.email = "Enter a valid email address.";
+    }
+
+    if (
+      profile.phone.trim() &&
+      !/^[+]?[\d\s()-]{7,20}$/.test(profile.phone.trim())
+    ) {
+      errors.phone = "Enter a valid phone number.";
+    }
+
+    setProfileErrors(errors);
+    return Object.keys(errors).length === 0;
   }
 
   function saveSettings(event) {
     event?.preventDefault();
 
+    if (section === "profile" && !validateProfile()) {
+      return;
+    }
+
     const next = {
       ...settings,
-      profile: section === "profile" ? profile : settings.profile,
+      profile:
+        section === "profile"
+          ? {
+              name: profile.name.trim(),
+              email: profile.email.trim(),
+              phone: profile.phone.trim(),
+            }
+          : settings.profile,
     };
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSettings(next);
-      setMessage("Your settings have been saved.");
-    } catch {
-      setMessage("Could not save settings in this browser.");
+      setProfile(next.profile);
+      setProfileErrors({});
+      showMessage("Your settings have been saved successfully.");
+    } catch (error) {
+      console.error("Unable to save settings:", error);
+      showMessage(
+        "Could not save settings in this browser. Check storage and try again.",
+        "error"
+      );
     }
   }
 
-  function saveProfile(event) {
-    event.preventDefault();
-    saveSettings(event);
+  if (!page) {
+    return (
+      <main className="min-h-screen bg-slate-50 p-6">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50 text-[#0D21A1]">
+            <SettingsIcon size={25} />
+          </div>
+
+          <h1 className="mt-4 text-xl font-bold text-slate-900">
+            Settings page not found
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            The settings section you requested does not exist.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            className="mt-5 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white hover:bg-[#03045E]"
+          >
+            Back to Settings
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
+
+        {/* Back */}
         <button
           type="button"
           onClick={() => navigate("/settings")}
-          className="mb-6 inline-flex items-center gap-2 rounded-lg text-sm font-semibold text-slate-600 transition hover:text-blue-700"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1]"
         >
           <ArrowLeft size={18} />
           Back to Settings
         </button>
 
-        <div className="mb-6 flex items-center gap-4">
-          <div className="rounded-2xl bg-blue-100 p-3.5 text-blue-800">
+        {/* Header */}
+        <header className="mb-6 flex items-center gap-4">
+          <div className="rounded-2xl bg-blue-100 p-3.5 text-[#0D21A1]">
             <PageIcon size={27} />
           </div>
+
           <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
               {page.title}
             </h1>
+
             <p className="mt-1 text-sm text-slate-500">
               {page.description}
             </p>
           </div>
-        </div>
+        </header>
 
+        {/* Feedback */}
         {message && (
           <div
             role="status"
-            className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-800"
+            className={`mb-5 flex items-start gap-2 rounded-xl border p-3.5 text-sm ${
+              messageType === "error"
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
           >
-            <CheckCircle2 size={18} />
+            {messageType === "error" ? (
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            ) : (
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            )}
+
             {message}
           </div>
         )}
 
         <form
-          onSubmit={section === "profile" ? saveProfile : saveSettings}
+          onSubmit={saveSettings}
           className="rounded-2xl border border-slate-200 bg-white px-5 py-2 shadow-sm sm:px-7"
         >
+
+          {/* Profile */}
           {section === "profile" && (
             <div className="space-y-5 py-6">
               <div className="mb-6 flex items-center gap-3">
-                <div className="rounded-full bg-blue-50 p-3 text-blue-800">
+                <div className="rounded-full bg-blue-50 p-3 text-[#0D21A1]">
                   <UserRound size={25} />
                 </div>
+
                 <div>
-                  <h2 className="font-semibold">Personal details</h2>
+                  <h2 className="font-semibold text-slate-900">
+                    Personal Details
+                  </h2>
+
                   <p className="text-sm text-slate-500">
                     Update your profile information.
                   </p>
@@ -286,59 +390,92 @@ export default function SettingsDetail() {
 
               <Field
                 label="Full name"
+                name="name"
                 value={profile.name}
-                onChange={(e) =>
-                  setProfile({ ...profile, name: e.target.value })
-                }
+                onChange={(event) => {
+                  setProfile((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }));
+                  setProfileErrors((current) => ({
+                    ...current,
+                    name: "",
+                  }));
+                  setMessage("");
+                }}
                 placeholder="Enter your full name"
                 autoComplete="name"
+                maxLength={80}
                 required
+                error={profileErrors.name}
               />
 
               <Field
                 label="Email address"
+                name="email"
                 type="email"
                 value={profile.email}
-                onChange={(e) =>
-                  setProfile({ ...profile, email: e.target.value })
-                }
+                onChange={(event) => {
+                  setProfile((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }));
+                  setProfileErrors((current) => ({
+                    ...current,
+                    email: "",
+                  }));
+                  setMessage("");
+                }}
                 placeholder="you@example.com"
                 autoComplete="email"
                 required
+                error={profileErrors.email}
               />
 
               <Field
                 label="Phone number"
+                name="phone"
                 type="tel"
                 value={profile.phone}
-                onChange={(e) =>
-                  setProfile({ ...profile, phone: e.target.value })
-                }
+                onChange={(event) => {
+                  setProfile((current) => ({
+                    ...current,
+                    phone: event.target.value,
+                  }));
+                  setProfileErrors((current) => ({
+                    ...current,
+                    phone: "",
+                  }));
+                  setMessage("");
+                }}
                 placeholder="Enter phone number"
                 autoComplete="tel"
+                error={profileErrors.phone}
               />
 
-              <p className="text-xs leading-5 text-amber-700">
-                These details are saved in this browser for now. Backend
-                profile updates still need to be connected.
+              <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                These profile details are saved in this browser for now.
+                Backend profile updates are not connected here.
               </p>
             </div>
           )}
 
+          {/* Appearance */}
           {section === "appearance" && (
             <div className="py-2">
               <SettingRow
                 icon={Sun}
-                title="Light theme"
+                title="Light Theme"
                 description="A clean, bright workspace."
               >
                 <button
                   type="button"
                   onClick={() => updateSetting("theme", "light")}
-                  className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                  aria-pressed={settings.theme === "light"}
+                  className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                     settings.theme === "light"
-                      ? "border-blue-700 bg-blue-50 text-blue-800"
-                      : "border-slate-200 text-slate-600"
+                      ? "border-[#0D21A1] bg-blue-50 text-[#0D21A1]"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   Light
@@ -347,16 +484,17 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={Moon}
-                title="Dark theme"
+                title="Dark Theme"
                 description="A darker appearance for low-light environments."
               >
                 <button
                   type="button"
                   onClick={() => updateSetting("theme", "dark")}
-                  className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                  aria-pressed={settings.theme === "dark"}
+                  className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                     settings.theme === "dark"
-                      ? "border-blue-700 bg-blue-50 text-blue-800"
-                      : "border-slate-200 text-slate-600"
+                      ? "border-[#0D21A1] bg-blue-50 text-[#0D21A1]"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   Dark
@@ -365,29 +503,36 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={Monitor}
-                title="Preview"
-                description="See the selected appearance."
+                title="Current Appearance"
+                description="Your selected appearance preference."
               >
                 <span className="text-sm font-semibold text-slate-600">
                   {settings.theme === "dark" ? "Dark mode" : "Light mode"}
                 </span>
               </SettingRow>
+
+              <p className="py-4 text-xs leading-5 text-slate-500">
+                The selected theme preference is saved locally. Full
+                application-wide dark styling requires theme classes in
+                the rest of the application.
+              </p>
             </div>
           )}
 
+          {/* Preferences */}
           {section === "preferences" && (
             <div className="py-2">
               <SettingRow
                 icon={CalendarDays}
-                title="Date format"
+                title="Date Format"
                 description="Choose how dates are displayed in your workspace."
               >
                 <select
                   value={settings.dateFormat}
-                  onChange={(e) =>
-                    updateSetting("dateFormat", e.target.value)
+                  onChange={(event) =>
+                    updateSetting("dateFormat", event.target.value)
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm sm:w-44"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 sm:w-48"
                 >
                   <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                   <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -398,12 +543,14 @@ export default function SettingsDetail() {
               <SettingRow
                 icon={IndianRupee}
                 title="Currency"
-                description="Choose the currency for your financial display."
+                description="Choose the preferred currency for financial display."
               >
                 <select
                   value={settings.currency}
-                  onChange={(e) => updateSetting("currency", e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm sm:w-44"
+                  onChange={(event) =>
+                    updateSetting("currency", event.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 sm:w-48"
                 >
                   <option value="INR">INR — Indian Rupee</option>
                   <option value="USD">USD — US Dollar</option>
@@ -411,14 +558,21 @@ export default function SettingsDetail() {
                   <option value="GBP">GBP — Pound Sterling</option>
                 </select>
               </SettingRow>
+
+              <p className="py-4 text-xs leading-5 text-slate-500">
+                These preferences are saved locally. Other pages must
+                read these settings to apply the selected date format
+                and currency consistently.
+              </p>
             </div>
           )}
 
+          {/* Notifications */}
           {section === "notifications" && (
             <div className="py-2">
               <SettingRow
                 icon={Bell}
-                title="Budget alerts"
+                title="Budget Alerts"
                 description="Preference for alerts when spending approaches a budget limit."
               >
                 <Toggle
@@ -432,7 +586,7 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={CalendarDays}
-                title="Expense reminders"
+                title="Expense Reminders"
                 description="Preference for reminders to review or record expenses."
               >
                 <Toggle
@@ -446,7 +600,7 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={Mail}
-                title="Weekly summary"
+                title="Weekly Summary"
                 description="Preference for a weekly summary of your finances."
               >
                 <Toggle
@@ -466,34 +620,46 @@ export default function SettingsDetail() {
             </div>
           )}
 
+          {/* Privacy */}
           {section === "privacy" && (
             <div className="py-2">
               <SettingRow
                 icon={LockKeyhole}
-                title="Password and login"
-                description="Password changes must be handled through your secure backend."
+                title="Password and Login"
+                description="Use the password reset flow to update your password securely."
               >
-                <button
-                  type="button"
-                  onClick={() => navigate("/forgot-password")}
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                <Link
+                  to="/forgot-password"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#0D21A1] transition hover:bg-blue-50"
                 >
-                  Reset password
-                </button>
+                  Reset Password
+                </Link>
               </SettingRow>
 
               <SettingRow
                 icon={ShieldCheck}
-                title="Session security"
+                title="Session Security"
                 description="Always sign out when using a shared computer."
               >
-                <span className="text-sm text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Security tip
+                </span>
+              </SettingRow>
+
+              <SettingRow
+                icon={UserRound}
+                title="Account Privacy"
+                description="Avoid sharing passwords, OTPs or sensitive financial details."
+              >
+                <span className="text-sm font-semibold text-emerald-700">
+                  <ShieldCheck size={16} className="mr-1 inline" />
+                  Stay protected
                 </span>
               </SettingRow>
             </div>
           )}
 
+          {/* Account Management */}
           {section === "account" && (
             <div className="py-2">
               <div className="my-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -502,14 +668,16 @@ export default function SettingsDetail() {
                     size={21}
                     className="mt-0.5 shrink-0 text-amber-700"
                   />
+
                   <div>
                     <h2 className="font-semibold text-amber-900">
                       Account actions need care
                     </h2>
+
                     <p className="mt-1 text-sm leading-5 text-amber-800">
                       Deactivation and permanent deletion are not enabled
-                      until the authenticated backend endpoints are verified.
-                      This avoids accidentally losing your financial records.
+                      until authenticated backend endpoints are implemented.
+                      This avoids accidentally losing financial records.
                     </p>
                   </div>
                 </div>
@@ -517,7 +685,7 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={UserRoundCog}
-                title="Deactivate account"
+                title="Deactivate Account"
                 description="Temporarily disable access to your account."
               >
                 <button
@@ -532,14 +700,14 @@ export default function SettingsDetail() {
 
               <SettingRow
                 icon={AlertTriangle}
-                title="Delete account"
+                title="Delete Account"
                 description="Permanent deletion should require re-authentication and confirmation."
               >
                 <button
                   type="button"
                   disabled
                   title="Backend endpoint needs to be implemented"
-                  className="cursor-not-allowed rounded-xl border border-red-200 px-3 py-2 text-sm text-red-300"
+                  className="cursor-not-allowed rounded-xl border border-rose-200 px-3 py-2 text-sm text-rose-300"
                 >
                   Not connected
                 </button>
@@ -547,36 +715,38 @@ export default function SettingsDetail() {
             </div>
           )}
 
+          {/* Help */}
           {section === "help" && (
             <div className="py-2">
               <SettingRow
                 icon={CircleHelp}
-                title="Frequently asked questions"
+                title="Frequently Asked Questions"
                 description="Learn how to manage transactions, budgets and reports."
               >
                 <button
                   type="button"
                   onClick={() =>
-                    setMessage(
-                      "Tip: use Transactions to record expenses and Budgets to set spending limits."
+                    showMessage(
+                      "Tip: use Transactions to record expenses, Budgets to set spending limits, and Reports to review your financial activity."
                     )
                   }
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#0D21A1] transition hover:bg-blue-50"
                 >
-                  Quick tip
+                  Quick Tip
                 </button>
               </SettingRow>
 
               <SettingRow
                 icon={MessageCircle}
-                title="Contact support"
+                title="Contact Support"
                 description="Get help with a problem or report an issue."
               >
                 <a
                   href="mailto:support@example.com?subject=Expense%20Tracker%20Support"
-                  className="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#0D21A1] transition hover:bg-blue-50"
                 >
-                  Email support
+                  <Mail size={15} />
+                  Email Support
                 </a>
               </SettingRow>
 
@@ -587,19 +757,20 @@ export default function SettingsDetail() {
             </div>
           )}
 
+          {/* Save */}
           {["profile", "preferences", "notifications"].includes(section) && (
             <div className="flex justify-end border-t border-slate-100 py-5">
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#03045E] focus:outline-none focus:ring-4 focus:ring-blue-100"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E] focus:outline-none focus:ring-4 focus:ring-blue-100"
               >
                 <Save size={17} />
-                Save changes
+                Save Changes
               </button>
             </div>
           )}
         </form>
       </div>
-    </div>
+    </main>
   );
 }

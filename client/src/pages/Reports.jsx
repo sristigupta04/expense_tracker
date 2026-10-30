@@ -24,6 +24,7 @@ import {
 
 import formatCurrency from "../utils/formatCurrency";
 import Loader from "../components/common/Loader";
+
 export default function Reports() {
   const [summary, setSummary] = useState({
     income: 0,
@@ -59,10 +60,20 @@ export default function Reports() {
         balance: Number(summaryData?.balance) || 0,
       });
 
-      setCategoryReport(categoryData || {});
-      setMonthlyReport(monthlyData || {});
+      setCategoryReport(
+        categoryData && typeof categoryData === "object"
+          ? categoryData
+          : {}
+      );
+
+      setMonthlyReport(
+        monthlyData && typeof monthlyData === "object"
+          ? monthlyData
+          : {}
+      );
     } catch (err) {
       console.error("Error loading reports:", err);
+
       setError(
         err?.response?.data?.message ||
           err?.message ||
@@ -82,6 +93,7 @@ export default function Reports() {
     () =>
       Object.entries(categoryReport)
         .map(([name, amount]) => [name, Number(amount) || 0])
+        .filter(([, amount]) => amount > 0)
         .sort((a, b) => b[1] - a[1]),
     [categoryReport]
   );
@@ -105,9 +117,11 @@ export default function Reports() {
     1
   );
 
+  const savingsDifference = summary.income - summary.expense;
+
   const savingsRate =
     summary.income > 0
-      ? ((summary.income - summary.expense) / summary.income) * 100
+      ? (savingsDifference / summary.income) * 100
       : 0;
 
   if (loading) {
@@ -121,6 +135,7 @@ export default function Reports() {
   return (
     <main className="min-h-screen bg-slate-50/80">
       <div className="mx-auto max-w-7xl space-y-7 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+
         {/* Header */}
         <header className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
@@ -161,6 +176,7 @@ export default function Reports() {
           >
             <AlertCircle size={20} className="shrink-0" />
             <p className="flex-1">{error}</p>
+
             <button
               type="button"
               onClick={() => loadReports(true)}
@@ -178,6 +194,7 @@ export default function Reports() {
             <h2 className="text-base font-bold text-slate-900">
               Financial overview
             </h2>
+
             <span className="text-xs font-medium text-slate-400">
               Based on available report data
             </span>
@@ -216,18 +233,20 @@ export default function Reports() {
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <PiggyBank size={23} />
             </div>
+
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-500">
                 Savings difference
               </p>
+
               <p
                 className={`mt-1 break-words text-xl font-extrabold ${
-                  summary.income - summary.expense >= 0
+                  savingsDifference >= 0
                     ? "text-emerald-700"
                     : "text-rose-600"
                 }`}
               >
-                {formatCurrency(summary.income - summary.expense)}
+                {formatCurrency(savingsDifference)}
               </p>
             </div>
           </div>
@@ -236,15 +255,16 @@ export default function Reports() {
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
               <CircleDollarSign size={23} />
             </div>
+
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-500">
                 Income retained
               </p>
+
               <p className="mt-1 text-xl font-extrabold text-slate-900">
-                {summary.income > 0
-                  ? `${savingsRate.toFixed(1)}%`
-                  : "—"}
+                {summary.income > 0 ? `${savingsRate.toFixed(1)}%` : "—"}
               </p>
+
               <p className="mt-1 text-xs text-slate-400">
                 Based on income minus expenses
               </p>
@@ -254,17 +274,20 @@ export default function Reports() {
 
         {/* Reports */}
         <div className="grid gap-6 xl:grid-cols-2">
-          {/* Category breakdown */}
+
+          {/* Category Breakdown */}
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-6 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                   <ReceiptText size={21} />
                 </div>
+
                 <div>
                   <h2 className="font-bold text-slate-900">
                     Category breakdown
                   </h2>
+
                   <p className="mt-1 text-xs text-slate-500">
                     Expenses grouped by category
                   </p>
@@ -290,11 +313,17 @@ export default function Reports() {
                     <div key={category}>
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-600" />
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                              index === 0 ? "bg-blue-700" : "bg-blue-400"
+                            }`}
+                          />
+
                           <span className="truncate text-sm font-medium text-slate-700">
                             {category}
                           </span>
                         </div>
+
                         <span className="shrink-0 text-sm font-bold text-slate-900">
                           {formatCurrency(amount)}
                         </span>
@@ -322,16 +351,18 @@ export default function Reports() {
             )}
           </section>
 
-          {/* Monthly overview */}
+          {/* Monthly Overview */}
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
                 <CalendarDays size={21} />
               </div>
+
               <div>
                 <h2 className="font-bold text-slate-900">
                   Monthly overview
                 </h2>
+
                 <p className="mt-1 text-xs text-slate-500">
                   Financial activity by month
                 </p>
@@ -354,6 +385,7 @@ export default function Reports() {
                         <span className="truncate text-sm font-medium text-slate-700">
                           {month}
                         </span>
+
                         <span className="shrink-0 text-sm font-bold text-slate-900">
                           {formatCurrency(amount)}
                         </span>
@@ -373,7 +405,7 @@ export default function Reports() {
           </section>
         </div>
 
-        {/* Financial note */}
+        {/* Financial Note */}
         <section className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
             {summary.balance >= 0 ? (
@@ -387,6 +419,7 @@ export default function Reports() {
             <h3 className="font-bold text-slate-900">
               Your financial snapshot
             </h3>
+
             <p className="mt-1 text-sm leading-6 text-slate-600">
               {summary.balance >= 0
                 ? "Your reported balance is non-negative. Review the category and monthly breakdowns to understand your financial activity."
@@ -395,6 +428,7 @@ export default function Reports() {
           </div>
         </section>
 
+        {/* Footer */}
         <footer className="flex items-center justify-center gap-2 pb-2 text-xs text-slate-400">
           <BarChart3 size={14} />
           Reports are calculated from the data provided by your backend.
@@ -432,9 +466,11 @@ function SummaryCard({ title, amount, description, icon: Icon, theme }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">{title}</p>
+
           <p className="mt-3 break-words text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
             {amount}
           </p>
+
           <p className={`mt-2 text-xs font-medium ${style.label}`}>
             {description}
           </p>
@@ -456,7 +492,11 @@ function EmptyReport({ message }) {
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-400 shadow-sm">
         <ChartNoAxesCombined size={23} />
       </div>
-      <p className="text-sm font-medium text-slate-600">{message}</p>
+
+      <p className="text-sm font-medium text-slate-600">
+        {message}
+      </p>
+
       <p className="mt-1 text-xs text-slate-400">
         Data will appear here when available.
       </p>

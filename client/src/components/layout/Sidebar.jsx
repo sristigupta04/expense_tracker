@@ -1,5 +1,6 @@
 
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   ReceiptText,
@@ -20,8 +21,9 @@ import {
   Repeat,
   Users,
   ChevronDown,
+  HelpCircle,
+  LogOut,
 } from "lucide-react";
-import { useState } from "react";
 
 const mainLinks = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -34,12 +36,12 @@ const mainLinks = [
 ];
 
 const bankingLinks = [
-  { label: "Bank Accounts", path: "/bank-accounts", icon: Landmark },
   { label: "Banking Dashboard", path: "/banking", icon: LayoutDashboard },
+  { label: "Bank Accounts", path: "/bank-accounts", icon: Landmark },
   { label: "Bank Transactions", path: "/bank-transactions", icon: ReceiptText },
   { label: "Credit Cards", path: "/credit-cards", icon: CreditCard },
   { label: "Bank Statements", path: "/bank-statements", icon: FileSpreadsheet },
-  { label: "Money Transfers", path: "/transfers", icon: ArrowLeftRight },
+  { label: "Money Transfers", path: "/money-transfers", icon: ArrowLeftRight },
   { label: "Reconciliation", path: "/reconciliation", icon: Scale },
 ];
 
@@ -47,8 +49,16 @@ const accountLinks = [
   { label: "Profile", path: "/profile", icon: UserRound },
   { label: "Account Management", path: "/settings/account", icon: Settings },
   { label: "Privacy & Security", path: "/settings/privacy", icon: ShieldCheck },
-  { label: "Deactivate Account", path: "/settings/account/deactivate", icon: UserRoundX },
-  { label: "Delete Account", path: "/settings/account/delete", icon: Trash2 },
+  {
+    label: "Deactivate Account",
+    path: "/settings/account/deactivate",
+    icon: UserRoundX,
+  },
+  {
+    label: "Delete Account",
+    path: "/settings/account/delete",
+    icon: Trash2,
+  },
 ];
 
 function SidebarLink({ item, onClose }) {
@@ -59,38 +69,72 @@ function SidebarLink({ item, onClose }) {
       to={path}
       onClick={onClose}
       className={({ isActive }) =>
-        `flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition ${
+        `group flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition-all duration-200 ${
           isActive
             ? "bg-blue-600 text-white shadow-lg shadow-blue-950/20"
             : "text-blue-100 hover:bg-white/10 hover:text-white"
         }`
       }
     >
-      <Icon size={19} />
-      <span>{label}</span>
+      {({ isActive }) => (
+        <>
+          <Icon
+            size={19}
+            strokeWidth={isActive ? 2.4 : 1.9}
+            className="shrink-0"
+          />
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+
+          {isActive && (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white" />
+          )}
+        </>
+      )}
     </NavLink>
   );
 }
 
-function SidebarSection({ title, items, onClose, defaultOpen = true }) {
+function SidebarSection({
+  title,
+  items,
+  onClose,
+  defaultOpen = true,
+}) {
   const [expanded, setExpanded] = useState(defaultOpen);
+  const location = useLocation();
+
+  const hasActiveLink = items.some(
+    (item) =>
+      location.pathname === item.path ||
+      location.pathname.startsWith(`${item.path}/`)
+  );
+
+  useEffect(() => {
+    if (hasActiveLink) {
+      setExpanded(true);
+    }
+  }, [hasActiveLink]);
 
   return (
     <div className="mt-6">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="mb-3 flex w-full items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-widest text-blue-300"
+        aria-expanded={expanded}
+        className="mb-3 flex w-full items-center justify-between rounded-lg px-3 py-1 text-[11px] font-bold uppercase tracking-[0.15em] text-blue-300 transition hover:text-white"
       >
-        {title}
+        <span>{title}</span>
+
         <ChevronDown
           size={15}
-          className={`transition-transform ${expanded ? "" : "-rotate-90"}`}
+          className={`transition-transform duration-200 ${
+            expanded ? "" : "-rotate-90"
+          }`}
         />
       </button>
 
       {expanded && (
-        <nav className="space-y-1.5">
+        <nav aria-label={title} className="space-y-1.5">
           {items.map((item) => (
             <SidebarLink
               key={item.path}
@@ -104,20 +148,46 @@ function SidebarSection({ title, items, onClose, defaultOpen = true }) {
   );
 }
 
-export default function Sidebar({ open, onClose }) {
+export default function Sidebar({ open = false, onClose }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open, onClose]);
+
+  useEffect(() => {
+    onClose?.();
+  }, [location.pathname]);
+
   return (
     <>
+      {/* Mobile overlay */}
       {open && (
         <button
           type="button"
           aria-label="Close navigation overlay"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] lg:hidden"
         />
       )}
 
+      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col bg-[#172554] text-white transition-transform duration-300 ${
+        id="app-sidebar"
+        aria-label="Main sidebar"
+        className={`fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col bg-[#172554] text-white shadow-2xl transition-transform duration-300 ease-in-out ${
           open ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0`}
       >
@@ -126,17 +196,19 @@ export default function Sidebar({ open, onClose }) {
           <NavLink
             to="/dashboard"
             onClick={onClose}
-            className="flex items-center gap-3"
+            className="flex min-w-0 items-center gap-3"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 shadow-lg shadow-blue-950/30">
               <CreditCard size={22} />
             </div>
 
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-bold tracking-tight">
                 ExpenseFlow
               </h2>
-              <p className="text-xs text-blue-200">Personal Finance</p>
+              <p className="text-xs text-blue-200">
+                Personal Finance
+              </p>
             </div>
           </NavLink>
 
@@ -144,14 +216,14 @@ export default function Sidebar({ open, onClose }) {
             type="button"
             onClick={onClose}
             aria-label="Close sidebar"
-            className="rounded-lg p-2 hover:bg-white/10 lg:hidden"
+            className="rounded-lg p-2 text-blue-100 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 lg:hidden"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto px-4 pb-5 pt-2">
+        <div className="flex-1 overflow-y-auto px-4 pb-5 pt-2 [scrollbar-color:rgba(255,255,255,0.2)_transparent] [scrollbar-width:thin]">
           <SidebarSection
             title="Main Menu"
             items={mainLinks}
@@ -170,6 +242,7 @@ export default function Sidebar({ open, onClose }) {
             onClose={onClose}
           />
 
+          {/* Additional links */}
           <div className="mt-6 border-t border-white/10 pt-4">
             <SidebarLink
               item={{
@@ -179,12 +252,39 @@ export default function Sidebar({ open, onClose }) {
               }}
               onClose={onClose}
             />
+
+            <div className="mt-1.5">
+              <SidebarLink
+                item={{
+                  label: "Help & Support",
+                  path: "/settings/help",
+                  icon: HelpCircle,
+                }}
+                onClose={onClose}
+              />
+            </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3.5">
-            <p className="text-sm font-semibold">Stay in control</p>
-            <p className="mt-1 text-xs leading-5 text-blue-200">
-              Monitor your spending, manage budgets and build better money habits.
+          {/* Finance tip */}
+          <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/20 text-blue-200">
+                <Wallet size={17} />
+              </div>
+
+              <p className="text-sm font-semibold">Stay in control</p>
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-blue-200">
+              Monitor your spending, manage budgets and build better money
+              habits.
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <p className="px-3 text-[10px] font-medium tracking-wide text-blue-300">
+              EXPENSEFLOW · PERSONAL FINANCE
             </p>
           </div>
         </div>

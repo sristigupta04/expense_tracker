@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useMemo, useState } from "react";
 import {
   ArrowDownUp,
   ArrowRight,
@@ -7,7 +8,6 @@ import {
   IndianRupee,
   Building2,
   FileText,
-  Save,
   RotateCcw,
   AlertCircle,
   CheckCircle2,
@@ -15,13 +15,20 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const today = new Date().toISOString().split("T")[0];
+const getToday = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
 
 const defaultValues = {
   fromAccountId: "",
   toAccountId: "",
   amount: "",
-  transferDate: today,
+  transferDate: getToday(),
   transferMethod: "Bank Transfer",
   referenceNumber: "",
   notes: "",
@@ -32,6 +39,51 @@ const inputClass =
 
 const labelClass = "text-sm font-semibold text-slate-700";
 
+const getAccountId = (account) =>
+  account?.id ?? account?._id ?? "";
+
+const getAccountName = (account) =>
+  account?.accountName || account?.bankName || "Bank Account";
+
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const formatCurrency = (value, currency = "INR") => {
+  const amount = toNumber(value);
+
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `₹${amount.toLocaleString("en-IN")}`;
+  }
+};
+
+const getInitialFormData = (initialData = {}) => ({
+  ...defaultValues,
+  ...initialData,
+  fromAccountId:
+    initialData.fromAccountId != null
+      ? String(initialData.fromAccountId)
+      : "",
+  toAccountId:
+    initialData.toAccountId != null
+      ? String(initialData.toAccountId)
+      : "",
+  amount:
+    initialData.amount != null
+      ? String(initialData.amount)
+      : "",
+  transferDate: initialData.transferDate || getToday(),
+  referenceNumber: initialData.referenceNumber || "",
+  notes: initialData.notes || "",
+});
+
 export default function TransferForm({
   accounts = [],
   initialData = {},
@@ -39,41 +91,53 @@ export default function TransferForm({
   submitLabel = "Transfer Money",
   loading = false,
 }) {
-  const [formData, setFormData] = useState({
-    ...defaultValues,
-    ...initialData,
-  });
+  const [formData, setFormData] = useState(() =>
+    getInitialFormData(initialData)
+  );
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
 
-  const fromAccount = accounts.find(
-    (account) => String(account.id) === String(formData.fromAccountId)
+  const today = getToday();
+
+  const safeAccounts = useMemo(
+    () =>
+      Array.isArray(accounts)
+        ? accounts.filter(
+            (account) =>
+              account && typeof account === "object"
+          )
+        : [],
+    [accounts]
   );
 
-  const toAccount = accounts.find(
-    (account) => String(account.id) === String(formData.toAccountId)
+  const fromAccount = safeAccounts.find(
+    (account) =>
+      String(getAccountId(account)) ===
+      String(formData.fromAccountId)
   );
 
-  const amount = Number(formData.amount || 0);
-  const fromBalance = Number(
-    fromAccount?.currentBalance ?? fromAccount?.openingBalance ?? 0
+  const toAccount = safeAccounts.find(
+    (account) =>
+      String(getAccountId(account)) ===
+      String(formData.toAccountId)
+  );
+
+  const amount = toNumber(formData.amount);
+
+  const fromBalance = Math.max(
+    0,
+    toNumber(
+      fromAccount?.currentBalance ??
+        fromAccount?.openingBalance ??
+        0
+    )
   );
 
   const fromCurrency = fromAccount?.currency || "INR";
   const toCurrency = toAccount?.currency || "INR";
-  const sameCurrency = fromCurrency === toCurrency;
 
-  const formatCurrency = (value, currency = "INR") => {
-    try {
-      return new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(Number(value || 0));
-    } catch {
-      return `₹${Number(value || 0).toLocaleString("en-IN")}`;
-    }
-  };
+  const sameCurrency = fromCurrency === toCurrency;
 
   const updateField = (name, value) => {
     setFormData((previous) => ({
@@ -84,24 +148,36 @@ export default function TransferForm({
     setErrors((previous) => ({
       ...previous,
       [name]: "",
+      currency: "",
     }));
+
+    setSubmitError("");
   };
 
   const validate = () => {
     const nextErrors = {};
 
     if (!formData.fromAccountId) {
-      nextErrors.fromAccountId = "Please select the source account.";
+      nextErrors.fromAccountId =
+        "Please select the source account.";
+    } else if (!fromAccount) {
+      nextErrors.fromAccountId =
+        "Selected source account was not found.";
     }
 
     if (!formData.toAccountId) {
-      nextErrors.toAccountId = "Please select the destination account.";
+      nextErrors.toAccountId =
+        "Please select the destination account.";
+    } else if (!toAccount) {
+      nextErrors.toAccountId =
+        "Selected destination account was not found.";
     }
 
     if (
       formData.fromAccountId &&
       formData.toAccountId &&
-      String(formData.fromAccountId) === String(formData.toAccountId)
+      String(formData.fromAccountId) ===
+        String(formData.toAccountId)
     ) {
       nextErrors.toAccountId =
         "Source and destination accounts must be different.";
@@ -109,57 +185,90 @@ export default function TransferForm({
 
     if (
       formData.amount === "" ||
-      !Number.isFinite(amount) ||
+      !Number.isFinite(Number(formData.amount)) ||
       amount <= 0
     ) {
-      nextErrors.amount = "Enter a transfer amount greater than zero.";
+      nextErrors.amount =
+        "Enter a transfer amount greater than zero.";
+    } else if (!/^\d+(\.\d{1,2})?$/.test(formData.amount)) {
+      nextErrors.amount =
+        "Enter an amount with maximum two decimal places.";
     } else if (fromAccount && amount > fromBalance) {
-      nextErrors.amount = "Insufficient balance in the source account.";
+      nextErrors.amount =
+        "Insufficient balance in the source account.";
     }
 
     if (!formData.transferDate) {
-      nextErrors.transferDate = "Transfer date is required.";
+      nextErrors.transferDate =
+        "Transfer date is required.";
     } else if (formData.transferDate > today) {
-      nextErrors.transferDate = "Transfer date cannot be in the future.";
+      nextErrors.transferDate =
+        "Transfer date cannot be in the future.";
     }
 
-    if (fromAccount && toAccount && !sameCurrency) {
+    if (
+      fromAccount &&
+      toAccount &&
+      !sameCurrency
+    ) {
       nextErrors.currency =
         "Both accounts must use the same currency for this transfer.";
     }
 
+    if (formData.referenceNumber.length > 100) {
+      nextErrors.referenceNumber =
+        "Reference number cannot exceed 100 characters.";
+    }
+
+    if (formData.notes.length > 500) {
+      nextErrors.notes =
+        "Notes cannot exceed 500 characters.";
+    }
+
     setErrors(nextErrors);
+
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!validate()) return;
+    if (loading || !validate()) return;
+
+    if (!onSubmit) {
+      setSubmitError("Transfer submit handler is not configured.");
+      return;
+    }
 
     const payload = {
       ...formData,
       amount,
       fromAccountId: formData.fromAccountId,
       toAccountId: formData.toAccountId,
-      fromAccountName: fromAccount?.accountName || fromAccount?.bankName || "",
-      toAccountName: toAccount?.accountName || toAccount?.bankName || "",
+      fromAccountName: getAccountName(fromAccount),
+      toAccountName: getAccountName(toAccount),
       currency: fromCurrency,
       referenceNumber: formData.referenceNumber.trim(),
       notes: formData.notes.trim(),
       status: "Completed",
     };
 
-    onSubmit?.(payload);
+    setSubmitError("");
+
+    try {
+      await onSubmit(payload);
+    } catch (error) {
+      setSubmitError(
+        error?.message ||
+          "Unable to save the transfer. Please try again."
+      );
+    }
   };
 
   const resetForm = () => {
-    setFormData({
-      ...defaultValues,
-      fromAccountId: "",
-      toAccountId: "",
-    });
+    setFormData(getInitialFormData(initialData));
     setErrors({});
+    setSubmitError("");
   };
 
   const swapAccounts = () => {
@@ -170,6 +279,7 @@ export default function TransferForm({
     }));
 
     setErrors({});
+    setSubmitError("");
   };
 
   return (
@@ -182,7 +292,9 @@ export default function TransferForm({
           </div>
 
           <div>
-            <h2 className="font-bold text-slate-900">Transfer Accounts</h2>
+            <h2 className="font-bold text-slate-900">
+              Transfer Accounts
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Choose where the money comes from and where it goes.
             </p>
@@ -210,28 +322,41 @@ export default function TransferForm({
                 }
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.fromAccountId)}
+                aria-describedby={
+                  errors.fromAccountId
+                    ? "fromAccountError"
+                    : undefined
+                }
+                disabled={loading}
               >
                 <option value="">Select source account</option>
 
-                {accounts.map((account) => (
-                  <option
-                    key={account.id}
-                    value={String(account.id)}
-                    disabled={
-                      String(account.id) === String(formData.toAccountId)
-                    }
-                  >
-                    {account.accountName || account.bankName || "Bank Account"}
-                    {account.accountNumber
-                      ? ` (••${String(account.accountNumber).slice(-4)})`
-                      : ""}
-                  </option>
-                ))}
+                {safeAccounts.map((account, index) => {
+                  const id = getAccountId(account);
+
+                  return (
+                    <option
+                      key={id || `source-${index}`}
+                      value={String(id)}
+                      disabled={
+                        String(id) ===
+                        String(formData.toAccountId)
+                      }
+                    >
+                      {getAccountName(account)}
+                      {account.accountNumber
+                        ? ` (••${String(account.accountNumber).slice(-4)})`
+                        : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
             {errors.fromAccountId && (
-              <ErrorMessage message={errors.fromAccountId} />
+              <div id="fromAccountError">
+                <ErrorMessage message={errors.fromAccountId} />
+              </div>
             )}
 
             {fromAccount && (
@@ -239,6 +364,7 @@ export default function TransferForm({
                 <p className="text-xs font-medium text-slate-500">
                   Available balance
                 </p>
+
                 <p className="mt-1 text-lg font-bold text-slate-900">
                   {formatCurrency(fromBalance, fromCurrency)}
                 </p>
@@ -251,7 +377,10 @@ export default function TransferForm({
             <button
               type="button"
               onClick={swapAccounts}
-              disabled={!formData.fromAccountId && !formData.toAccountId}
+              disabled={
+                loading ||
+                (!formData.fromAccountId && !formData.toAccountId)
+              }
               aria-label="Swap transfer accounts"
               title="Swap accounts"
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-blue-700 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -280,28 +409,41 @@ export default function TransferForm({
                 }
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.toAccountId)}
+                aria-describedby={
+                  errors.toAccountId
+                    ? "toAccountError"
+                    : undefined
+                }
+                disabled={loading}
               >
                 <option value="">Select destination account</option>
 
-                {accounts.map((account) => (
-                  <option
-                    key={account.id}
-                    value={String(account.id)}
-                    disabled={
-                      String(account.id) === String(formData.fromAccountId)
-                    }
-                  >
-                    {account.accountName || account.bankName || "Bank Account"}
-                    {account.accountNumber
-                      ? ` (••${String(account.accountNumber).slice(-4)})`
-                      : ""}
-                  </option>
-                ))}
+                {safeAccounts.map((account, index) => {
+                  const id = getAccountId(account);
+
+                  return (
+                    <option
+                      key={id || `destination-${index}`}
+                      value={String(id)}
+                      disabled={
+                        String(id) ===
+                        String(formData.fromAccountId)
+                      }
+                    >
+                      {getAccountName(account)}
+                      {account.accountNumber
+                        ? ` (••${String(account.accountNumber).slice(-4)})`
+                        : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
             {errors.toAccountId && (
-              <ErrorMessage message={errors.toAccountId} />
+              <div id="toAccountError">
+                <ErrorMessage message={errors.toAccountId} />
+              </div>
             )}
 
             {toAccount && (
@@ -309,8 +451,9 @@ export default function TransferForm({
                 <p className="text-xs font-medium text-slate-500">
                   Destination account
                 </p>
+
                 <p className="mt-1 truncate text-sm font-bold text-slate-900">
-                  {toAccount.accountName || toAccount.bankName}
+                  {getAccountName(toAccount)}
                 </p>
               </div>
             )}
@@ -333,7 +476,9 @@ export default function TransferForm({
           </div>
 
           <div>
-            <h2 className="font-bold text-slate-900">Transfer Details</h2>
+            <h2 className="font-bold text-slate-900">
+              Transfer Details
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Enter the amount and transfer information.
             </p>
@@ -358,14 +503,19 @@ export default function TransferForm({
                 min="0.01"
                 step="0.01"
                 value={formData.amount}
-                onChange={(event) => updateField("amount", event.target.value)}
+                onChange={(event) =>
+                  updateField("amount", event.target.value)
+                }
                 placeholder="Enter amount"
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.amount)}
+                disabled={loading}
               />
             </div>
 
-            {errors.amount && <ErrorMessage message={errors.amount} />}
+            {errors.amount && (
+              <ErrorMessage message={errors.amount} />
+            )}
           </div>
 
           <div>
@@ -389,6 +539,7 @@ export default function TransferForm({
                 }
                 className={`${inputClass} pl-10`}
                 aria-invalid={Boolean(errors.transferDate)}
+                disabled={loading}
               />
             </div>
 
@@ -409,6 +560,7 @@ export default function TransferForm({
                 updateField("transferMethod", event.target.value)
               }
               className={inputClass}
+              disabled={loading}
             >
               <option value="Bank Transfer">Bank Transfer</option>
               <option value="UPI">UPI</option>
@@ -438,7 +590,12 @@ export default function TransferForm({
               }
               placeholder="Enter transfer reference"
               className={inputClass}
+              disabled={loading}
             />
+
+            {errors.referenceNumber && (
+              <ErrorMessage message={errors.referenceNumber} />
+            )}
           </div>
         </div>
       </section>
@@ -448,17 +605,29 @@ export default function TransferForm({
         <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5 sm:p-6">
           <div className="mb-4 flex items-center gap-2">
             <CheckCircle2 size={19} className="text-blue-700" />
-            <h3 className="font-bold text-slate-900">Transfer Summary</h3>
+            <h3 className="font-bold text-slate-900">
+              Transfer Summary
+            </h3>
           </div>
 
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-xs text-slate-500">From</p>
+
               <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-                {fromAccount.accountName || fromAccount.bankName}
+                {getAccountName(fromAccount)}
               </p>
+
               <p className="mt-2 text-lg font-bold text-rose-600">
                 −{formatCurrency(amount, fromCurrency)}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Balance after transfer:{" "}
+                {formatCurrency(
+                  Math.max(0, fromBalance - amount),
+                  fromCurrency
+                )}
               </p>
             </div>
 
@@ -469,18 +638,31 @@ export default function TransferForm({
 
             <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-xs text-slate-500">To</p>
+
               <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-                {toAccount.accountName || toAccount.bankName}
+                {getAccountName(toAccount)}
               </p>
+
               <p className="mt-2 text-lg font-bold text-emerald-700">
                 +{formatCurrency(amount, toCurrency)}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Balance after transfer:{" "}
+                {formatCurrency(
+                  toNumber(
+                    toAccount.currentBalance ??
+                      toAccount.openingBalance
+                  ) + amount,
+                  toCurrency
+                )}
               </p>
             </div>
           </div>
 
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            This is a transfer preview. Account balances will change only when
-            your submit handler saves the transfer successfully.
+            This is a transfer preview. Account balances will change only
+            when your submit handler saves the transfer successfully.
           </p>
         </section>
       )}
@@ -493,7 +675,9 @@ export default function TransferForm({
           </div>
 
           <div>
-            <h2 className="font-bold text-slate-900">Additional Notes</h2>
+            <h2 className="font-bold text-slate-900">
+              Additional Notes
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Add an optional note about this transfer.
             </p>
@@ -509,24 +693,46 @@ export default function TransferForm({
           rows={3}
           maxLength={500}
           value={formData.notes}
-          onChange={(event) => updateField("notes", event.target.value)}
+          onChange={(event) =>
+            updateField("notes", event.target.value)
+          }
           placeholder="e.g. Moving monthly savings to another account"
           className={`${inputClass} resize-y`}
+          disabled={loading}
         />
 
         <p className="mt-1 text-right text-xs text-slate-400">
           {formData.notes.length}/500
         </p>
+
+        {errors.notes && (
+          <ErrorMessage message={errors.notes} />
+        )}
       </section>
 
       {/* Security note */}
       <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <ShieldCheck size={20} className="mt-0.5 shrink-0 text-slate-600" />
+        <ShieldCheck
+          size={20}
+          className="mt-0.5 shrink-0 text-slate-600"
+        />
+
         <p className="text-sm leading-6 text-slate-600">
           This form records a transfer in your expense tracker. It does not
           initiate a real bank transfer or move money between bank accounts.
         </p>
       </div>
+
+      {/* Submit error */}
+      {submitError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          {submitError}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -542,7 +748,7 @@ export default function TransferForm({
 
         <button
           type="submit"
-          disabled={loading || accounts.length < 2}
+          disabled={loading || safeAccounts.length < 2}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? (

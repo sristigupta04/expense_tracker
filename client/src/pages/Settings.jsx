@@ -100,10 +100,11 @@ export default function Settings() {
   }, [search]);
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
+
         {/* Page heading */}
-        <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
               <Settings2 size={16} />
@@ -127,10 +128,10 @@ export default function Settings() {
               Personalize your workspace
             </span>
           </div>
-        </div>
+        </header>
 
         {/* Profile overview */}
-        <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="h-2 bg-gradient-to-r from-[#03045E] via-[#0D21A1] to-[#2563EB]" />
 
           <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -156,10 +157,10 @@ export default function Settings() {
               <ChevronRight size={16} />
             </button>
           </div>
-        </div>
+        </section>
 
         {/* Search */}
-        <div className="mb-8">
+        <section className="mb-8">
           <label
             htmlFor="settings-search"
             className="mb-2 block text-sm font-semibold text-slate-700"
@@ -170,7 +171,7 @@ export default function Settings() {
           <div className="relative">
             <Search
               size={19}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
             />
 
             <input
@@ -182,7 +183,7 @@ export default function Settings() {
               className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
             />
           </div>
-        </div>
+        </section>
 
         {/* Settings groups */}
         <div className="space-y-8">
@@ -232,18 +233,19 @@ export default function Settings() {
             </section>
           ))}
 
+          {/* Empty search state */}
           {filteredGroups.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center">
-              <Search
-                size={28}
-                className="mx-auto mb-3 text-slate-400"
-              />
+              <Search size={28} className="mx-auto mb-3 text-slate-400" />
+
               <h3 className="font-semibold text-slate-800">
                 No settings found
               </h3>
+
               <p className="mt-1 text-sm text-slate-500">
                 Try searching with a different keyword.
               </p>
+
               <button
                 type="button"
                 onClick={() => setSearch("")}
@@ -256,14 +258,14 @@ export default function Settings() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 flex items-center justify-center gap-2 pb-4 text-xs text-slate-400">
+        <footer className="mt-8 flex items-center justify-center gap-2 pb-4 text-xs text-slate-400">
           <Monitor size={14} />
           <span>Personal Finance Tracker</span>
           <span>•</span>
           <LockKeyhole size={13} />
           <span>Account settings</span>
-        </div>
+        </footer>
       </div>
-    </div>
+    </main>
   );
 }

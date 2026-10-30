@@ -1,12 +1,18 @@
-
 import api from "./api";
 
+const validateId = (id) => {
+  if (!id || !/^[a-f\d]{24}$/i.test(String(id))) {
+    throw new Error("A valid notification ID is required.");
+  }
+};
+
 // Get all notifications
-export const getNotifications = async () => {
-  const { data } = await api.get("/notifications");
+export const getNotifications = async (params = {}) => {
+  const { data } = await api.get("/notifications", { params });
 
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.notifications)) return data.notifications;
+  if (Array.isArray(data?.data)) return data.data;
 
   return [];
 };
@@ -15,16 +21,19 @@ export const getNotifications = async () => {
 export const getUnreadCount = async () => {
   const { data } = await api.get("/notifications/unread-count");
 
-  return Number(data?.count ?? data?.unreadCount ?? 0);
+  const count = Number(data?.count ?? data?.unreadCount ?? 0);
+
+  return Number.isFinite(count) && count >= 0 ? count : 0;
 };
 
-// Mark a notification as read
+// Mark one notification as read
 export const markNotificationRead = async (id) => {
-  if (!id) {
-    throw new Error("Notification ID is required.");
-  }
+  validateId(id);
 
-  const { data } = await api.patch(`/notifications/${id}/read`);
+  const { data } = await api.patch(
+    `/notifications/${encodeURIComponent(id)}/read`
+  );
+
   return data;
 };
 
@@ -36,10 +45,11 @@ export const markAllNotificationsRead = async () => {
 
 // Delete a notification
 export const deleteNotification = async (id) => {
-  if (!id) {
-    throw new Error("Notification ID is required.");
-  }
+  validateId(id);
 
-  const { data } = await api.delete(`/notifications/${id}`);
+  const { data } = await api.delete(
+    `/notifications/${encodeURIComponent(id)}`
+  );
+
   return data;
 };

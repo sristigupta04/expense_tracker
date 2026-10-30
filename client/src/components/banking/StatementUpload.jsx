@@ -1,3 +1,4 @@
+
 import { useRef, useState } from "react";
 import {
   Upload,
@@ -10,9 +11,14 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const ACCEPTED_EXTENSIONS = [".csv"];
+const formatFileSize = (size) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+};
 
 export default function StatementUpload({
   onFileSelect,
@@ -30,15 +36,27 @@ export default function StatementUpload({
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const maxAllowedSize = Math.min(maxSizeMB * 1024 * 1024, MAX_FILE_SIZE);
+  const safeMaxSizeMB = Number.isFinite(Number(maxSizeMB))
+    ? Math.max(0.1, Math.min(Number(maxSizeMB), 10))
+    : 10;
+
+  const maxAllowedSize = Math.min(
+    safeMaxSizeMB * 1024 * 1024,
+    MAX_FILE_SIZE
+  );
+
+  const acceptedExtensions = String(acceptedFormats)
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.startsWith("."));
 
   const validateFile = (file) => {
     if (!file) return "Please select a file.";
 
     const extension = `.${file.name.split(".").pop().toLowerCase()}`;
 
-    if (!ACCEPTED_EXTENSIONS.includes(extension)) {
-      return "Please upload a CSV (.csv) file.";
+    if (!acceptedExtensions.includes(extension)) {
+      return `Please upload a supported file: ${acceptedExtensions.join(", ")}.`;
     }
 
     if (file.size === 0) {
@@ -46,15 +64,15 @@ export default function StatementUpload({
     }
 
     if (file.size > maxAllowedSize) {
-      return `File size must be less than ${Math.floor(
-        maxAllowedSize / (1024 * 1024)
-      )} MB.`;
+      return `File size must be less than ${formatFileSize(maxAllowedSize)}.`;
     }
 
     return "";
   };
 
   const handleFile = (file) => {
+    if (loading) return;
+
     setError("");
     setSuccessMessage("");
 
@@ -64,6 +82,11 @@ export default function StatementUpload({
       setSelectedFile(null);
       setError(validationError);
       onFileSelect?.(null);
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+
       return;
     }
 
@@ -74,7 +97,9 @@ export default function StatementUpload({
   const handleInputChange = (event) => {
     const file = event.target.files?.[0];
 
-    if (file) handleFile(file);
+    if (file) {
+      handleFile(file);
+    }
 
     // Allows selecting the same file again.
     event.target.value = "";
@@ -84,12 +109,18 @@ export default function StatementUpload({
     event.preventDefault();
     setDragging(false);
 
+    if (loading) return;
+
     const file = event.dataTransfer.files?.[0];
 
-    if (file) handleFile(file);
+    if (!file) return;
+
+    handleFile(file);
   };
 
   const removeFile = () => {
+    if (loading) return;
+
     setSelectedFile(null);
     setError("");
     setSuccessMessage("");
@@ -106,13 +137,13 @@ export default function StatementUpload({
       return;
     }
 
-    setError("");
-    setSuccessMessage("");
-
     if (!onUpload) {
       setError("Upload handler is not configured.");
       return;
     }
+
+    setError("");
+    setSuccessMessage("");
 
     try {
       await onUpload(selectedFile);
@@ -125,13 +156,6 @@ export default function StatementUpload({
     }
   };
 
-  const formatFileSize = (size) => {
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-
-    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
-  };
-
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Header */}
@@ -140,8 +164,11 @@ export default function StatementUpload({
           <FileSpreadsheet size={24} />
         </div>
 
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-slate-900">
+            {title}
+          </h2>
+
           <p className="mt-1 text-sm leading-6 text-slate-500">
             {description}
           </p>
@@ -153,7 +180,7 @@ export default function StatementUpload({
         <div
           onDragOver={(event) => {
             event.preventDefault();
-            setDragging(true);
+            if (!loading) setDragging(true);
           }}
           onDragLeave={(event) => {
             event.preventDefault();
@@ -164,7 +191,7 @@ export default function StatementUpload({
             dragging
               ? "border-blue-500 bg-blue-50"
               : "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50/40"
-          }`}
+          } ${loading ? "pointer-events-none opacity-70" : ""}`}
         >
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm ring-1 ring-slate-100">
             <CloudUpload size={30} />
@@ -185,20 +212,22 @@ export default function StatementUpload({
             className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Upload size={17} />
-            Choose CSV File
+            Choose File
           </button>
 
           <input
             ref={inputRef}
             type="file"
-            accept={acceptedFormats}
+            accept={acceptedExtensions.join(",")}
             onChange={handleInputChange}
+            disabled={loading}
             className="hidden"
             aria-label="Choose bank statement file"
           />
 
           <p className="mt-4 text-xs text-slate-400">
-            CSV format · Maximum {Math.floor(maxAllowedSize / (1024 * 1024))} MB
+            {acceptedExtensions.join(", ").toUpperCase()} · Maximum{" "}
+            {safeMaxSizeMB} MB
           </p>
         </div>
 
@@ -271,6 +300,7 @@ export default function StatementUpload({
             <p className="text-sm font-semibold text-slate-800">
               Keep your financial data safe
             </p>
+
             <p className="mt-1 text-xs leading-5 text-slate-500">
               Remove unnecessary personal details before uploading. Never
               include your bank PIN, password or OTP in the statement file.
@@ -278,7 +308,7 @@ export default function StatementUpload({
           </div>
         </div>
 
-        {/* Action */}
+        {/* Action buttons */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"

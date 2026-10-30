@@ -1,19 +1,18 @@
-
 import api from "./api";
 
-// Fetch transaction data for export
+// Fetch transactions for export
 export const getExportTransactions = async (params = {}) => {
   const response = await api.get("/transactions", { params });
-
   const data = response.data;
 
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.transactions)) return data.transactions;
+  if (Array.isArray(data?.data)) return data.data;
 
   return [];
 };
 
-// Convert transactions to CSV and download it
+// Export transactions to CSV
 export const exportTransactionsCSV = (transactions = []) => {
   if (!Array.isArray(transactions) || transactions.length === 0) {
     throw new Error("No transactions available to export.");
@@ -29,19 +28,25 @@ export const exportTransactionsCSV = (transactions = []) => {
   ];
 
   const escapeCSV = (value) => {
-    const text = String(value ?? "");
+    let text = String(value ?? "");
+
+    // Prevent spreadsheet formula injection
+    if (/^[\s]*[=+\-@]/.test(text)) {
+      text = `'${text}`;
+    }
+
     return `"${text.replace(/"/g, '""')}"`;
   };
 
   const rows = [
-    columns.map((column) => escapeCSV(column.label)).join(","),
+    columns.map(({ label }) => escapeCSV(label)).join(","),
     ...transactions.map((transaction) =>
       columns
-        .map((column) => {
+        .map(({ key }) => {
           const value =
-            column.key === "title"
+            key === "title"
               ? transaction.title ?? transaction.name ?? ""
-              : transaction[column.key] ?? "";
+              : transaction[key] ?? "";
 
           return escapeCSV(value);
         })
@@ -57,14 +62,16 @@ export const exportTransactionsCSV = (transactions = []) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
 
-  link.href = url;
-  link.download = `transactions-${new Date()
-    .toISOString()
-    .slice(0, 10)}.csv`;
+  try {
+    link.href = url;
+    link.download = `transactions-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
 
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  URL.revokeObjectURL(url);
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 };

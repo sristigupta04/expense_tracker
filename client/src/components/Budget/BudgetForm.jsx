@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Wallet, X } from "lucide-react";
 
 const DEFAULT_CATEGORIES = [
@@ -15,14 +15,21 @@ const DEFAULT_CATEGORIES = [
   "Other",
 ];
 
-const initialValues = {
+const INITIAL_VALUES = {
   category: "Food",
   limit: "",
   period: "monthly",
 };
 
 const inputClass =
-  "mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+  "mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70";
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
 
 export default function BudgetForm({
   open = true,
@@ -32,15 +39,28 @@ export default function BudgetForm({
   onClose,
   loading = false,
 }) {
-  const [form, setForm] = useState(initialValues);
+  const [form, setForm] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
 
   const isEditing = Boolean(budget);
 
-  const categoryOptions = categories
-    .map((item) => (typeof item === "string" ? item : item.name))
-    .filter(Boolean);
+  const categoryOptions = useMemo(() => {
+    const source = Array.isArray(categories)
+      ? categories
+      : DEFAULT_CATEGORIES;
+
+    const normalized = source
+      .map((item) =>
+        typeof item === "string" ? item : item?.name
+      )
+      .filter(
+        (item) => typeof item === "string" && item.trim()
+      )
+      .map((item) => item.trim());
+
+    return [...new Set(normalized)];
+  }, [categories]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,30 +77,45 @@ export default function BudgetForm({
         period: budget.period || "monthly",
       });
     } else {
-      setForm(initialValues);
+      setForm({
+        ...INITIAL_VALUES,
+        category: categoryOptions.includes("Food")
+          ? "Food"
+          : categoryOptions[0] || "Other",
+      });
     }
 
     setErrors({});
     setSubmitError("");
-  }, [budget, open]);
+  }, [budget, open, categoryOptions]);
 
   useEffect(() => {
-    if (
-      categoryOptions.length > 0 &&
-      !categoryOptions.includes(form.category)
-    ) {
-      setForm((current) => ({
-        ...current,
-        category: categoryOptions[0],
-      }));
-    }
-  }, [form.category, categoryOptions]);
+    if (!open) return;
 
-  if (!open) return null;
+    const handleEscape = (event) => {
+      if (event.key === "Escape" && !loading) {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open, loading, onClose]);
 
   const updateField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, [field]: "" }));
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    setErrors((current) => ({
+      ...current,
+      [field]: "",
+    }));
+
     setSubmitError("");
   };
 
@@ -99,9 +134,15 @@ export default function BudgetForm({
     if (form.limit.trim() === "") {
       nextErrors.limit = "Please enter a budget limit.";
     } else if (!Number.isFinite(limit) || limit <= 0) {
-      nextErrors.limit = "Budget limit must be greater than zero.";
+      nextErrors.limit =
+        "Budget limit must be greater than zero.";
     } else if (Math.round(limit * 100) / 100 !== limit) {
-      nextErrors.limit = "Maximum two decimal places are allowed.";
+      nextErrors.limit =
+        "Maximum two decimal places are allowed.";
+    }
+
+    if (!["weekly", "monthly", "yearly"].includes(form.period)) {
+      nextErrors.period = "Please select a valid budget period.";
     }
 
     setErrors(nextErrors);
@@ -133,11 +174,16 @@ export default function BudgetForm({
     }
   };
 
+  if (!open) return null;
+
   return (
     <div
       className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !loading) {
+        if (
+          event.target === event.currentTarget &&
+          !loading
+        ) {
           onClose?.();
         }
       }}
@@ -179,7 +225,11 @@ export default function BudgetForm({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 p-5 sm:p-6">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="space-y-5 p-5 sm:p-6"
+        >
           <div>
             <label
               htmlFor="budget-category"
@@ -194,13 +244,18 @@ export default function BudgetForm({
               onChange={(event) =>
                 updateField("category", event.target.value)
               }
+              disabled={loading || categoryOptions.length === 0}
               className={inputClass}
             >
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
+              {categoryOptions.length === 0 ? (
+                <option value="">No categories available</option>
+              ) : (
+                categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))
+              )}
             </select>
 
             {errors.category && (
@@ -234,6 +289,7 @@ export default function BudgetForm({
                   updateField("limit", event.target.value)
                 }
                 placeholder="e.g. 5000"
+                disabled={loading}
                 className={`${inputClass} pl-8`}
               />
             </div>
@@ -263,16 +319,23 @@ export default function BudgetForm({
               onChange={(event) =>
                 updateField("period", event.target.value)
               }
+              disabled={loading}
               className={inputClass}
             >
-              <option value="monthly">Monthly</option>
               <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
             </select>
 
+            {errors.period && (
+              <p className="mt-1.5 text-xs text-red-600">
+                {errors.period}
+              </p>
+            )}
+
             <p className="mt-1.5 text-xs text-slate-500">
-              Your budget period must be supported by the backend for
-              calculations to reset correctly.
+              Budget period calculations must also be supported
+              by your backend.
             </p>
           </div>
 
@@ -283,15 +346,12 @@ export default function BudgetForm({
 
             <p className="mt-1 text-sm text-blue-800">
               {form.category || "Category"} ·{" "}
-              {form.period.charAt(0).toUpperCase() + form.period.slice(1)}
+              {form.period.charAt(0).toUpperCase() +
+                form.period.slice(1)}
             </p>
 
             <p className="mt-2 text-2xl font-bold text-blue-900">
-              {new Intl.NumberFormat("en-IN", {
-                style: "currency",
-                currency: "INR",
-                maximumFractionDigits: 2,
-              }).format(Number(form.limit) || 0)}
+              {formatCurrency(form.limit)}
             </p>
           </div>
 
@@ -316,7 +376,7 @@ export default function BudgetForm({
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || categoryOptions.length === 0}
               className="min-h-11 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading

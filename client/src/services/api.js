@@ -1,24 +1,23 @@
-
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
 });
 
-// Attach authentication token to API requests
+// Attach JWT token
 api.interceptors.request.use(
   (config) => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token")
+        : null;
 
-      if (token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
@@ -26,7 +25,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle API response errors centrally
+// Centralized error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -34,7 +33,19 @@ api.interceptors.response.use(
       error.message = "Request timed out. Please try again.";
     } else if (!error.response) {
       error.message =
-        "Unable to connect to the server. Please check your backend.";
+        "Cannot connect to the server. Check whether your backend is running.";
+    } else {
+      const serverMessage = error.response.data?.message;
+
+      if (serverMessage) {
+        error.message = serverMessage;
+      } else if (error.response.status === 401) {
+        error.message = "Session expired. Please log in again.";
+      } else if (error.response.status === 403) {
+        error.message = "You do not have permission to perform this action.";
+      } else if (error.response.status >= 500) {
+        error.message = "Server error. Please try again later.";
+      }
     }
 
     return Promise.reject(error);

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sparkles,
   ChartNoAxesCombined,
+  CheckCircle2,
 } from "lucide-react";
 
 import { useAuth } from "../context/Authcontext";
@@ -27,14 +28,25 @@ export default function Login() {
   const location = useLocation();
   const { login, loading } = useAuth();
 
+  const registeredEmail = location.state?.email;
+  const registeredSuccessfully = location.state?.registered === true;
+
   async function handleSubmit(event) {
     event.preventDefault();
+
     setError("");
 
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
       setError("Please enter your email and password.");
+      return;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(cleanEmail)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -49,6 +61,7 @@ export default function Login() {
       }
 
       const requestedPath = location.state?.from;
+
       const destination =
         typeof requestedPath === "string"
           ? requestedPath
@@ -71,39 +84,47 @@ export default function Login() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F4F7FF] px-4 py-8 sm:px-6 lg:px-8">
-      {/* Soft background decoration */}
+
+      {/* Background Decoration */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -left-32 -top-32 h-80 w-80 rounded-full bg-blue-200/30 blur-3xl"
       />
+
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -bottom-40 -right-28 h-96 w-96 rounded-full bg-indigo-200/30 blur-3xl"
       />
 
+      {/* Login Container */}
       <div className="relative z-10 w-full max-w-[440px]">
+
         {/* Brand */}
         <Link
           to="/"
           aria-label="Expense Tracker home"
-          className="mb-8 flex items-center justify-center gap-3"
+          className="mb-8 flex items-center justify-center gap-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-4"
         >
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0D21A1] text-white shadow-lg shadow-blue-900/20">
             <Wallet size={25} strokeWidth={2.2} />
           </div>
 
           <span className="text-[25px] font-extrabold tracking-tight text-[#111827]">
-            Expense<span className="text-[#2563EB]">Tracker</span>
+            Expense
+            <span className="text-[#2563EB]">Tracker</span>
           </span>
         </Link>
 
-        {/* Login card */}
+        {/* Login Card */}
         <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_80px_-30px_rgba(30,64,175,0.22)]">
+
           <div className="p-6 sm:p-9">
+
             {/* Heading */}
             <div className="mb-8 text-center">
               <div className="relative mx-auto mb-5 flex h-[68px] w-[68px] items-center justify-center rounded-[22px] bg-[#EEF4FF] text-[#0D21A1]">
                 <LockKeyhole size={29} strokeWidth={1.8} />
+
                 <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white">
                   <Sparkles size={12} />
                 </span>
@@ -123,7 +144,29 @@ export default function Login() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Registration Success */}
+            {registeredSuccessfully && (
+              <div
+                role="status"
+                className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3.5 text-sm text-emerald-700"
+              >
+                <CheckCircle2 size={19} className="mt-0.5 shrink-0" />
+
+                <div>
+                  <p className="font-semibold">
+                    Account created successfully!
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5">
+                    Please sign in to continue.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+
               {/* Email */}
               <div>
                 <label
@@ -141,6 +184,7 @@ export default function Login() {
 
                   <input
                     id="login-email"
+                    name="email"
                     type="email"
                     autoComplete="email"
                     placeholder="you@example.com"
@@ -151,7 +195,7 @@ export default function Login() {
                     }}
                     required
                     disabled={loading}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -182,6 +226,7 @@ export default function Login() {
 
                   <input
                     id="login-password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     placeholder="Enter your password"
@@ -192,7 +237,7 @@ export default function Login() {
                     }}
                     required
                     disabled={loading}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-12 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-4 pl-12 pr-12 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                   />
 
                   <button
@@ -200,11 +245,12 @@ export default function Login() {
                     onClick={() =>
                       setShowPassword((previous) => !previous)
                     }
+                    disabled={loading}
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
                     }
                     aria-pressed={showPassword}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50"
                   >
                     {showPassword ? (
                       <EyeOff size={19} />
@@ -215,22 +261,23 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Error */}
+              {/* Error Message */}
               {error && (
                 <div
                   role="alert"
                   className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-3.5 text-sm text-red-700"
                 >
                   <AlertCircle size={19} className="mt-0.5 shrink-0" />
+
                   <p className="leading-5">{error}</p>
                 </div>
               )}
 
-              {/* Submit */}
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="group flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition duration-200 hover:bg-[#03045E] hover:shadow-xl active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                className="group flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D21A1] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition duration-200 hover:bg-[#03045E] hover:shadow-xl active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <>
@@ -240,6 +287,7 @@ export default function Login() {
                 ) : (
                   <>
                     Sign in
+
                     <ArrowRight
                       size={18}
                       className="transition-transform group-hover:translate-x-1"
@@ -249,7 +297,7 @@ export default function Login() {
               </button>
             </form>
 
-            {/* Register */}
+            {/* Register Link */}
             <p className="mt-7 text-center text-sm text-slate-600">
               Don't have an account?{" "}
               <Link
@@ -261,17 +309,18 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Security footer */}
+          {/* Security Footer */}
           <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-[#FAFBFF] px-4 py-4 text-center text-xs font-medium leading-5 text-slate-500 sm:px-6">
             <ShieldCheck
               size={17}
               className="shrink-0 text-emerald-600"
             />
+
             Sign in to access your personal finance dashboard.
           </div>
         </section>
 
-        {/* Bottom note */}
+        {/* Bottom Note */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
           <ChartNoAxesCombined size={15} />
           <span>Track smarter. Spend better.</span>

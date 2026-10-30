@@ -1,3 +1,4 @@
+
 import { Link } from "react-router-dom";
 import {
   CreditCard,
@@ -9,28 +10,62 @@ import {
 } from "lucide-react";
 
 const formatCurrency = (amount, currency = "INR") => {
+  const value = Number(amount ?? 0);
+
+  if (!Number.isFinite(value)) return "—";
+
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(value);
   } catch {
-    return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+    return `₹${value.toLocaleString("en-IN")}`;
   }
+};
+
+const formatDate = (date) => {
+  if (!date) return "—";
+
+  // Supports billing dates stored as day numbers.
+  if (/^\d{1,2}$/.test(String(date))) {
+    return `Day ${date}`;
+  }
+
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [year, month, day] = date.split("-").map(Number);
+    const parsed = new Date(year, month - 1, day);
+
+    return parsed.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return String(date);
+
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const getCardNumber = (number) => {
   if (!number) return "•••• •••• •••• ••••";
 
-  const digits = String(number).replace(/\s/g, "");
+  const digits = String(number).replace(/\D/g, "");
   const lastFour = digits.slice(-4);
 
   return `•••• •••• •••• ${lastFour}`;
 };
 
 const getBrandStyles = (brand = "") => {
-  const normalizedBrand = brand.toLowerCase();
+  const normalizedBrand = String(brand).toLowerCase();
 
   if (normalizedBrand.includes("visa")) {
     return {
@@ -59,11 +94,28 @@ const getBrandStyles = (brand = "") => {
   };
 };
 
+const getStatusStyles = (status) => {
+  const normalizedStatus = String(status || "Active").toLowerCase();
+
+  if (normalizedStatus === "active") {
+    return "bg-emerald-50 text-emerald-700";
+  }
+
+  if (normalizedStatus === "blocked") {
+    return "bg-rose-50 text-rose-700";
+  }
+
+  if (normalizedStatus === "pending") {
+    return "bg-amber-50 text-amber-700";
+  }
+
+  return "bg-slate-100 text-slate-600";
+};
+
 export default function CreditCardCard({ card }) {
   if (!card) return null;
 
   const {
-    id,
     cardName = "My Credit Card",
     bankName = "Bank",
     cardNumber = "",
@@ -78,15 +130,24 @@ export default function CreditCardCard({ card }) {
     outstandingBalance,
   } = card;
 
-  const limit = Math.max(0, Number(creditLimit || 0));
+  const cardId = card.id ?? card._id;
 
-  const available =
+  const rawLimit = Number(creditLimit);
+  const limit = Number.isFinite(rawLimit) ? Math.max(0, rawLimit) : 0;
+
+  const rawOutstanding = Number(outstandingBalance ?? 0);
+  const outstanding = Number.isFinite(rawOutstanding)
+    ? Math.max(0, rawOutstanding)
+    : 0;
+
+  const rawAvailable =
     availableLimit !== undefined && availableLimit !== null
-      ? Math.max(0, Number(availableLimit))
-      : Math.max(
-          0,
-          limit - Number(outstandingBalance || 0)
-        );
+      ? Number(availableLimit)
+      : limit - outstanding;
+
+  const available = Number.isFinite(rawAvailable)
+    ? Math.max(0, Math.min(limit, rawAvailable))
+    : 0;
 
   const used = Math.max(0, limit - available);
 
@@ -94,16 +155,10 @@ export default function CreditCardCard({ card }) {
     limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
 
   const brand = getBrandStyles(cardBrand);
-
   const normalizedStatus = String(status).toLowerCase();
-
   const isActive = normalizedStatus === "active";
 
-  const statusClass = isActive
-    ? "bg-emerald-50 text-emerald-700"
-    : normalizedStatus === "blocked"
-      ? "bg-rose-50 text-rose-700"
-      : "bg-slate-100 text-slate-600";
+  const statusClass = getStatusStyles(status);
 
   const progressClass =
     usagePercentage >= 80
@@ -115,9 +170,8 @@ export default function CreditCardCard({ card }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg">
       <div className="p-4 sm:p-5">
-        {/* Premium card preview */}
+        {/* Card Preview */}
         <div className="relative min-h-[205px] overflow-hidden rounded-2xl bg-gradient-to-br from-[#03045E] via-[#0D21A1] to-[#2563EB] p-5 text-white shadow-lg shadow-blue-900/20">
-          {/* Decorative shapes */}
           <div className="pointer-events-none absolute -right-14 -top-16 h-48 w-48 rounded-full border border-white/10" />
           <div className="pointer-events-none absolute -right-5 -top-7 h-36 w-36 rounded-full border border-white/10" />
           <div className="pointer-events-none absolute -bottom-16 left-16 h-36 w-36 rounded-full bg-white/5" />
@@ -129,9 +183,7 @@ export default function CreditCardCard({ card }) {
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold">
-                  {cardName}
-                </p>
+                <p className="truncate text-sm font-bold">{cardName}</p>
                 <p className="mt-0.5 truncate text-xs text-blue-100">
                   {bankName}
                 </p>
@@ -160,6 +212,7 @@ export default function CreditCardCard({ card }) {
               <p className="text-[10px] uppercase tracking-wider text-blue-100">
                 Card Holder
               </p>
+
               <p className="mt-1 truncate text-xs font-semibold uppercase tracking-wide">
                 {cardHolder || "CARD HOLDER"}
               </p>
@@ -169,16 +222,14 @@ export default function CreditCardCard({ card }) {
               <p className={`text-lg ${brand.className}`}>
                 {brand.label}
               </p>
-              <p className="mt-0.5 text-[9px] text-blue-100">
-                CREDIT
-              </p>
+              <p className="mt-0.5 text-[9px] text-blue-100">CREDIT</p>
             </div>
           </div>
         </div>
 
-        {/* Status and limit */}
+        {/* Status and Available Credit */}
         <div className="mt-5 flex items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-medium text-slate-500">
               Available Credit
             </p>
@@ -196,7 +247,7 @@ export default function CreditCardCard({ card }) {
           </span>
         </div>
 
-        {/* Credit utilization */}
+        {/* Credit Utilization */}
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs font-medium text-slate-500">
@@ -236,24 +287,20 @@ export default function CreditCardCard({ card }) {
           </div>
         </div>
 
-        {/* Billing information */}
+        {/* Billing Information */}
         {(billingDate || dueDate) && (
           <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3">
             <div>
-              <p className="text-xs text-slate-500">
-                Billing Date
-              </p>
+              <p className="text-xs text-slate-500">Billing Date</p>
               <p className="mt-1 text-sm font-semibold text-slate-800">
-                {billingDate || "—"}
+                {formatDate(billingDate)}
               </p>
             </div>
 
             <div>
-              <p className="text-xs text-slate-500">
-                Payment Due
-              </p>
+              <p className="text-xs text-slate-500">Payment Due</p>
               <p className="mt-1 text-sm font-semibold text-slate-800">
-                {dueDate || "—"}
+                {formatDate(dueDate)}
               </p>
             </div>
           </div>
@@ -261,23 +308,31 @@ export default function CreditCardCard({ card }) {
 
         {/* Actions */}
         <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-          <Link
-            to={`/credit-cards/${id}`}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Eye size={16} />
-            View Details
-            <ArrowUpRight size={15} />
-          </Link>
+          {cardId != null ? (
+            <>
+              <Link
+                to={`/credit-cards/${cardId}`}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <Eye size={16} />
+                View Details
+                <ArrowUpRight size={15} />
+              </Link>
 
-          <Link
-            to={`/credit-cards/${id}/edit`}
-            aria-label={`Edit ${cardName}`}
-            title="Edit credit card"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Pencil size={17} />
-          </Link>
+              <Link
+                to={`/credit-cards/${cardId}/edit`}
+                aria-label={`Edit ${cardName}`}
+                title="Edit credit card"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <Pencil size={17} />
+              </Link>
+            </>
+          ) : (
+            <p className="w-full rounded-xl bg-slate-50 px-4 py-3 text-center text-xs text-slate-500">
+              Card details are unavailable because its ID is missing.
+            </p>
+          )}
         </div>
       </div>
     </article>

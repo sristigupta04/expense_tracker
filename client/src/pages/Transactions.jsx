@@ -1,4 +1,3 @@
-
 import { useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -17,8 +16,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-import { useExpense } from "../context/expenseContext";
-import formatCurrency from "../utils/formatCurrency";
+import useExpense from "../hooks/useExpense";
+import formatCurrency from "../utils/formatcurrency";
 
 const categories = [
   "Food",
@@ -30,15 +29,26 @@ const categories = [
   "Entertainment",
   "Salary",
   "Freelance",
+  "Business",
+  "Investment",
   "Other",
 ];
+
+const today = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
 
 const initialForm = {
   title: "",
   amount: "",
   type: "expense",
   category: "Food",
-  date: new Date().toISOString().slice(0, 10),
+  date: today(),
   description: "",
 };
 
@@ -56,15 +66,45 @@ function getTitle(transaction) {
 }
 
 function getType(transaction) {
-  const type = String(transaction?.type || transaction?.transactionType || "").toLowerCase();
+  const type = String(
+    transaction?.type || transaction?.transactionType || ""
+  ).toLowerCase();
+
   return type === "income" ? "income" : "expense";
+}
+
+function getCategory(transaction) {
+  const category = transaction?.category;
+
+  if (typeof category === "string") return category;
+  if (category && typeof category === "object") {
+    return category.name || category.title || "Other";
+  }
+
+  return "Other";
 }
 
 function getDate(transaction) {
   const value = transaction?.date || transaction?.createdAt;
+
   if (!value) return "";
+
+  // Avoid UTC timezone shifting for YYYY-MM-DD values.
+  const dateString = String(value);
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+    return dateString.slice(0, 10);
+  }
+
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 export default function Transactions() {
@@ -75,7 +115,6 @@ export default function Transactions() {
     addExpense,
     editExpense,
     removeExpense,
-    fetchTransactions,
   } = useExpense();
 
   const [search, setSearch] = useState("");
@@ -83,26 +122,26 @@ export default function Transactions() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
+
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+
   const [form, setForm] = useState(initialForm);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const normalizedTransactions = useMemo(
-    () =>
-      (Array.isArray(transactions) ? transactions : []).map((item) => ({
-        ...item,
-        _id: item._id || item.id,
-        _title: getTitle(item),
-        _amount: getAmount(item),
-        _type: getType(item),
-        _category: item.category || "Other",
-        _date: getDate(item),
-      })),
-    [transactions]
-  );
+  const normalizedTransactions = useMemo(() => {
+    return (Array.isArray(transactions) ? transactions : []).map((item) => ({
+      ...item,
+      _id: item._id || item.id,
+      _title: getTitle(item),
+      _amount: getAmount(item),
+      _type: getType(item),
+      _category: getCategory(item),
+      _date: getDate(item),
+    }));
+  }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
     let result = normalizedTransactions.filter((item) => {
@@ -111,7 +150,7 @@ export default function Transactions() {
       const matchesSearch =
         !query ||
         item._title.toLowerCase().includes(query) ||
-        String(item._category).toLowerCase().includes(query) ||
+        item._category.toLowerCase().includes(query) ||
         String(item.description || "").toLowerCase().includes(query);
 
       const matchesType =
@@ -121,25 +160,27 @@ export default function Transactions() {
         categoryFilter === "all" || item._category === categoryFilter;
 
       let matchesPeriod = true;
+
       if (periodFilter !== "all" && item._date) {
-        const transactionDate = new Date(`${item._date}T00:00:00`);
+        const [year, month, day] = item._date.split("-").map(Number);
+        const transactionDate = new Date(year, month - 1, day);
         const now = new Date();
-        const startOfToday = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        );
 
         if (periodFilter === "month") {
           matchesPeriod =
             transactionDate.getMonth() === now.getMonth() &&
             transactionDate.getFullYear() === now.getFullYear();
-        } else if (periodFilter === "30days") {
-          const start = new Date(startOfToday);
+        }
+
+        if (periodFilter === "30days") {
+          const start = new Date();
+          start.setHours(0, 0, 0, 0);
           start.setDate(start.getDate() - 29);
-          matchesPeriod =
-            transactionDate >= start && transactionDate <= now;
-        } else if (periodFilter === "year") {
+
+          matchesPeriod = transactionDate >= start && transactionDate <= now;
+        }
+
+        if (periodFilter === "year") {
           matchesPeriod =
             transactionDate.getFullYear() === now.getFullYear();
         }
@@ -157,12 +198,15 @@ export default function Transactions() {
       if (sortOrder === "oldest") {
         return (a._date || "").localeCompare(b._date || "");
       }
+
       if (sortOrder === "highest") {
         return b._amount - a._amount;
       }
+
       if (sortOrder === "lowest") {
         return a._amount - b._amount;
       }
+
       return (b._date || "").localeCompare(a._date || "");
     });
 
@@ -185,14 +229,18 @@ export default function Transactions() {
       .filter((item) => item._type === "expense")
       .reduce((sum, item) => sum + item._amount, 0);
 
-    return { income, expense, balance: income - expense };
+    return {
+      income,
+      expense,
+      balance: income - expense,
+    };
   }, [normalizedTransactions]);
 
   const openCreate = () => {
     setEditing(null);
     setForm({
       ...initialForm,
-      date: new Date().toISOString().slice(0, 10),
+      date: today(),
     });
     setFormError("");
     setShowForm(true);
@@ -200,16 +248,26 @@ export default function Transactions() {
 
   const openEdit = (transaction) => {
     setEditing(transaction);
+
     setForm({
       title: transaction._title,
       amount: String(transaction._amount),
       type: transaction._type,
       category: transaction._category,
-      date: transaction._date || initialForm.date,
+      date: transaction._date || today(),
       description: transaction.description || "",
     });
+
     setFormError("");
     setShowForm(true);
+  };
+
+  const closeForm = () => {
+    if (saving) return;
+
+    setShowForm(false);
+    setEditing(null);
+    setFormError("");
   };
 
   const handleSubmit = async (event) => {
@@ -217,12 +275,19 @@ export default function Transactions() {
     setFormError("");
 
     const amount = Number(form.amount);
+
     if (!form.title.trim()) {
       setFormError("Please enter a transaction title.");
       return;
     }
+
     if (!Number.isFinite(amount) || amount <= 0) {
       setFormError("Enter an amount greater than zero.");
+      return;
+    }
+
+    if (!form.date) {
+      setFormError("Please select a transaction date.");
       return;
     }
 
@@ -236,9 +301,16 @@ export default function Transactions() {
     };
 
     setSaving(true);
+
     try {
       if (editing) {
-        await editExpense(editing._id, payload);
+        const id = editing._id || editing.id;
+
+        if (!id) {
+          throw new Error("Transaction ID is missing.");
+        }
+
+        await editExpense(id, payload);
       } else {
         await addExpense(payload);
       }
@@ -246,6 +318,7 @@ export default function Transactions() {
       setShowForm(false);
       setEditing(null);
       setForm(initialForm);
+      setFormError("");
     } catch (err) {
       setFormError(
         err?.response?.data?.message ||
@@ -258,16 +331,21 @@ export default function Transactions() {
   };
 
   const handleDelete = async (transaction) => {
-    if (
-      !window.confirm(
-        `Delete "${transaction._title}"? This action cannot be undone.`
-      )
-    ) {
+    const id = transaction._id || transaction.id;
+
+    if (!id) {
+      window.alert("Transaction ID is missing.");
       return;
     }
 
+    const confirmed = window.confirm(
+      `Delete "${transaction._title}"? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
     try {
-      await removeExpense(transaction._id);
+      await removeExpense(id);
     } catch (err) {
       window.alert(
         err?.response?.data?.message ||
@@ -285,9 +363,17 @@ export default function Transactions() {
     setSortOrder("newest");
   };
 
+  const availableCategories = [
+    ...new Set([
+      ...categories,
+      ...normalizedTransactions.map((item) => item._category),
+    ]),
+  ];
+
   return (
     <main className="min-h-screen bg-slate-50/80 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-7">
+
         {/* Header */}
         <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -295,9 +381,11 @@ export default function Transactions() {
               <ReceiptText size={15} />
               Money management
             </div>
+
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
               Transactions
             </h1>
+
             <p className="mt-2 text-sm leading-6 text-slate-500">
               View, search, and manage your income and expenses in one place.
             </p>
@@ -306,7 +394,7 @@ export default function Transactions() {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E] focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E]"
           >
             <Plus size={18} />
             Add transaction
@@ -322,6 +410,7 @@ export default function Transactions() {
             color="emerald"
             description="All recorded income"
           />
+
           <SummaryCard
             title="Total expenses"
             amount={formatCurrency(totals.expense)}
@@ -329,6 +418,7 @@ export default function Transactions() {
             color="rose"
             description="All recorded expenses"
           />
+
           <SummaryCard
             title="Net balance"
             amount={formatCurrency(totals.balance)}
@@ -346,6 +436,7 @@ export default function Transactions() {
                 size={18}
                 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
+
               <input
                 type="search"
                 value={search}
@@ -369,6 +460,7 @@ export default function Transactions() {
                 <SlidersHorizontal size={17} />
                 Filters
               </button>
+
               <button
                 type="button"
                 onClick={resetFilters}
@@ -400,10 +492,10 @@ export default function Transactions() {
                 onChange={setCategoryFilter}
                 options={[
                   ["all", "All categories"],
-                  ...[...new Set([
-                    ...categories,
-                    ...normalizedTransactions.map((item) => item._category),
-                  ])].map((category) => [category, category]),
+                  ...availableCategories.map((category) => [
+                    category,
+                    category,
+                  ]),
                 ]}
               />
 
@@ -441,11 +533,13 @@ export default function Transactions() {
               <h2 className="font-bold text-slate-900">
                 All transactions
               </h2>
+
               <p className="mt-1 text-xs text-slate-500">
                 {filteredTransactions.length} transaction
                 {filteredTransactions.length === 1 ? "" : "s"} found
               </p>
             </div>
+
             <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-500">
               <CalendarDays size={15} />
               {new Date().toLocaleDateString("en-IN", {
@@ -458,7 +552,9 @@ export default function Transactions() {
 
           {error && (
             <div className="m-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {String(error)}
+              {typeof error === "string"
+                ? error
+                : error?.message || "Unable to load transactions."}
             </div>
           )}
 
@@ -476,14 +572,17 @@ export default function Transactions() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
                 <ReceiptText size={27} />
               </div>
+
               <h3 className="mt-4 font-bold text-slate-900">
                 No transactions found
               </h3>
+
               <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
                 {transactions.length
                   ? "Try changing your search or filters."
                   : "Start by adding your first income or expense."}
               </p>
+
               <button
                 type="button"
                 onClick={transactions.length ? resetFilters : openCreate}
@@ -529,6 +628,7 @@ export default function Transactions() {
                       <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-slate-100">
                     {filteredTransactions.map((transaction) => (
                       <tr
@@ -550,12 +650,15 @@ export default function Transactions() {
                                 <ArrowUpRight size={19} />
                               )}
                             </div>
+
                             <div className="min-w-0">
                               <p className="max-w-56 truncate text-sm font-semibold text-slate-900">
                                 {transaction._title}
                               </p>
+
                               {transaction.description &&
-                                transaction.description !== transaction._title && (
+                                transaction.description !==
+                                  transaction._title && (
                                   <p className="mt-1 max-w-56 truncate text-xs text-slate-400">
                                     {transaction.description}
                                   </p>
@@ -563,17 +666,21 @@ export default function Transactions() {
                             </div>
                           </div>
                         </td>
+
                         <td className="px-6 py-4">
                           <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600">
                             {transaction._category}
                           </span>
                         </td>
+
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
                           {formatDate(transaction._date)}
                         </td>
+
                         <td className="px-6 py-4">
                           <TypeBadge type={transaction._type} />
                         </td>
+
                         <td
                           className={`whitespace-nowrap px-6 py-4 text-right text-sm font-bold ${
                             transaction._type === "income"
@@ -584,6 +691,7 @@ export default function Transactions() {
                           {transaction._type === "income" ? "+" : "−"}
                           {formatCurrency(transaction._amount)}
                         </td>
+
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-1">
                             <ActionButton
@@ -592,6 +700,7 @@ export default function Transactions() {
                             >
                               <Pencil size={16} />
                             </ActionButton>
+
                             <ActionButton
                               label="Delete transaction"
                               danger
@@ -610,13 +719,13 @@ export default function Transactions() {
           )}
         </section>
 
-        {/* Add/edit modal */}
+        {/* Add / Edit modal */}
         {showForm && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget && !saving) {
-                setShowForm(false);
+                closeForm();
               }
             }}
           >
@@ -634,22 +743,27 @@ export default function Transactions() {
                   >
                     {editing ? "Edit transaction" : "Add transaction"}
                   </h2>
+
                   <p className="mt-1 text-sm text-slate-500">
                     Enter the details below.
                   </p>
                 </div>
+
                 <button
                   type="button"
                   aria-label="Close form"
                   disabled={saving}
-                  onClick={() => setShowForm(false)}
+                  onClick={closeForm}
                   className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4 p-5 sm:p-6">
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-4 p-5 sm:p-6"
+              >
                 <div>
                   <label
                     htmlFor="transaction-title"
@@ -657,6 +771,7 @@ export default function Transactions() {
                   >
                     Title
                   </label>
+
                   <input
                     id="transaction-title"
                     required
@@ -677,6 +792,7 @@ export default function Transactions() {
                   >
                     Amount (₹)
                   </label>
+
                   <input
                     id="transaction-amount"
                     required
@@ -696,6 +812,7 @@ export default function Transactions() {
                   <label className="mb-1.5 block text-sm font-semibold text-slate-700">
                     Transaction type
                   </label>
+
                   <div className="grid grid-cols-2 gap-3">
                     {["expense", "income"].map((type) => (
                       <button
@@ -728,6 +845,7 @@ export default function Transactions() {
                   >
                     Category
                   </label>
+
                   <select
                     id="transaction-category"
                     value={form.category}
@@ -736,7 +854,7 @@ export default function Transactions() {
                     }
                     className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   >
-                    {categories.map((category) => (
+                    {availableCategories.map((category) => (
                       <option key={category} value={category}>
                         {category}
                       </option>
@@ -751,6 +869,7 @@ export default function Transactions() {
                   >
                     Date
                   </label>
+
                   <input
                     id="transaction-date"
                     type="date"
@@ -770,6 +889,7 @@ export default function Transactions() {
                   >
                     Description (optional)
                   </label>
+
                   <textarea
                     id="transaction-description"
                     rows={3}
@@ -796,11 +916,12 @@ export default function Transactions() {
                   <button
                     type="button"
                     disabled={saving}
-                    onClick={() => setShowForm(false)}
+                    onClick={closeForm}
                     className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
+
                   <button
                     type="submit"
                     disabled={saving}
@@ -842,6 +963,7 @@ function SummaryCard({ title, amount, icon: Icon, color, description }) {
           </p>
           <p className="mt-2 text-xs text-slate-500">{description}</p>
         </div>
+
         <div
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
             styles[color] || styles.blue
@@ -860,6 +982,7 @@ function FilterSelect({ label, value, onChange, options }) {
       <span className="mb-1.5 block text-xs font-semibold text-slate-500">
         {label}
       </span>
+
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -896,7 +1019,12 @@ function TypeBadge({ type }) {
   );
 }
 
-function ActionButton({ label, onClick, danger = false, children }) {
+function ActionButton({
+  label,
+  onClick,
+  danger = false,
+  children,
+}) {
   return (
     <button
       type="button"
@@ -922,7 +1050,9 @@ function TransactionMobileCard({ transaction, onEdit, onDelete }) {
       <div className="flex items-start gap-3">
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-            isIncome ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"
+            isIncome
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-rose-50 text-rose-600"
           }`}
         >
           {isIncome ? (
@@ -938,10 +1068,12 @@ function TransactionMobileCard({ transaction, onEdit, onDelete }) {
               <p className="break-words text-sm font-semibold text-slate-900">
                 {transaction._title}
               </p>
+
               <p className="mt-1 text-xs text-slate-500">
                 {transaction._category} · {formatDate(transaction._date)}
               </p>
             </div>
+
             <p
               className={`shrink-0 text-sm font-bold ${
                 isIncome ? "text-emerald-700" : "text-slate-900"
@@ -954,10 +1086,12 @@ function TransactionMobileCard({ transaction, onEdit, onDelete }) {
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <TypeBadge type={transaction._type} />
+
             <div className="flex items-center gap-1">
               <ActionButton label="Edit transaction" onClick={onEdit}>
                 <Pencil size={16} />
               </ActionButton>
+
               <ActionButton
                 label="Delete transaction"
                 onClick={onDelete}
@@ -976,7 +1110,9 @@ function TransactionMobileCard({ transaction, onEdit, onDelete }) {
 function formatDate(value) {
   if (!value) return "Date unavailable";
 
-  const date = new Date(`${value}T00:00:00`);
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
   if (Number.isNaN(date.getTime())) return "Date unavailable";
 
   return date.toLocaleDateString("en-IN", {

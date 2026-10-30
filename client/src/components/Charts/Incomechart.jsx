@@ -1,5 +1,5 @@
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -17,12 +17,20 @@ const formatCurrency = (value) =>
     currency: "INR",
     notation: "compact",
     maximumFractionDigits: 1,
-  }).format(value);
+  }).format(Number(value) || 0);
 
 function normalizeDate(value) {
   if (!value) return null;
 
+  // Date-only string ko timezone shift se bachata hai.
+  if (typeof value === "string") {
+    const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (dateOnly) return value;
+  }
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return null;
 
   const year = date.getFullYear();
@@ -32,34 +40,46 @@ function normalizeDate(value) {
   return `${year}-${month}-${day}`;
 }
 
+function formatDay(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export default function IncomeChart({
   transactions = [],
   loading = false,
 }) {
+  const chartId = useId();
+
   const chartData = useMemo(() => {
     const grouped = {};
+    const source = Array.isArray(transactions) ? transactions : [];
 
-    transactions.forEach((item) => {
-      if (String(item.type).toLowerCase() !== "income") return;
+    source.forEach((item) => {
+      if (String(item?.type || "").toLowerCase() !== "income") {
+        return;
+      }
 
       const date = normalizeDate(
-        item.date || item.createdAt || item.created_at
+        item?.date || item?.createdAt || item?.created_at
       );
 
-      if (!date) return;
+      const amount = Number(item?.amount);
 
-      grouped[date] =
-        (grouped[date] || 0) + (Number(item.amount) || 0);
+      if (!date || !Number.isFinite(amount) || amount <= 0) return;
+
+      grouped[date] = (grouped[date] || 0) + amount;
     });
 
     return Object.entries(grouped)
       .map(([date, amount]) => ({
         date,
         amount,
-        day: new Date(`${date}T12:00:00`).toLocaleDateString(
-          "en-IN",
-          { day: "numeric", month: "short" }
-        ),
+        day: formatDay(date),
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-30);
@@ -76,7 +96,7 @@ export default function IncomeChart({
   const hasData = chartData.some((item) => item.amount > 0);
 
   return (
-    <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-900">
@@ -92,108 +112,116 @@ export default function IncomeChart({
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-emerald-50/80 p-3.5">
-          <p className="text-xs font-medium text-emerald-700">
-            Total income
-          </p>
-          <p className="mt-1 text-xl font-bold text-emerald-800">
-            {formatCurrency(totalIncome)}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-slate-50 p-3.5">
-          <p className="text-xs font-medium text-slate-500">
-            Average per active day
-          </p>
-          <p className="mt-1 text-xl font-bold text-slate-900">
-            {formatCurrency(averageIncome)}
-          </p>
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
         </div>
-      ) : !hasData ? (
-        <div className="flex h-64 flex-col items-center justify-center text-center">
-          <TrendingUp size={30} className="text-slate-300" />
-          <p className="mt-3 text-sm font-semibold text-slate-700">
-            No income transactions found
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Add an income transaction to see your earnings trend.
-          </p>
-        </div>
       ) : (
-        <div className="mt-6 h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: -18, bottom: 0 }}
-            >
-              <CartesianGrid
-                stroke="#E2E8F0"
-                strokeDasharray="4 4"
-                vertical={false}
-              />
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-emerald-50/80 p-3.5">
+              <p className="text-xs font-medium text-emerald-700">
+                Total income
+              </p>
+              <p className="mt-1 text-xl font-bold text-emerald-800">
+                {formatCurrency(totalIncome)}
+              </p>
+            </div>
 
-              <XAxis
-                dataKey="day"
-                tick={{ fill: "#64748B", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                minTickGap={20}
-                dy={10}
-              />
+            <div className="rounded-xl bg-slate-50 p-3.5">
+              <p className="text-xs font-medium text-slate-500">
+                Average per active day
+              </p>
+              <p className="mt-1 text-xl font-bold text-slate-900">
+                {formatCurrency(averageIncome)}
+              </p>
+            </div>
+          </div>
 
-              <YAxis
-                tickFormatter={formatCurrency}
-                tick={{ fill: "#64748B", fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                width={60}
-              />
+          {!hasData ? (
+            <div className="flex h-64 flex-col items-center justify-center text-center">
+              <TrendingUp size={30} className="text-slate-300" />
 
-              <Tooltip
-                formatter={(value) => [
-                  formatCurrency(Number(value)),
-                  "Income",
-                ]}
-                labelFormatter={(_, payload) =>
-                  payload?.[0]?.payload?.date || ""
-                }
-                contentStyle={{
-                  borderRadius: 12,
-                  border: "1px solid #E2E8F0",
-                  boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
-                  fontSize: 12,
-                }}
-              />
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                No income transactions found
+              </p>
 
-              <Line
-                type="monotone"
-                dataKey="amount"
-                name="Income"
-                stroke="#16A34A"
-                strokeWidth={2.5}
-                dot={{
-                  r: 3,
-                  fill: "#16A34A",
-                  stroke: "#FFFFFF",
-                  strokeWidth: 2,
-                }}
-                activeDot={{
-                  r: 6,
-                  fill: "#16A34A",
-                  stroke: "#FFFFFF",
-                  strokeWidth: 2,
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Add an income transaction to see your earnings trend.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, left: -18, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    stroke="#E2E8F0"
+                    strokeDasharray="4 4"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fill: "#64748B", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    minTickGap={20}
+                    dy={10}
+                  />
+
+                  <YAxis
+                    tickFormatter={formatCurrency}
+                    tick={{ fill: "#64748B", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={60}
+                  />
+
+                  <Tooltip
+                    formatter={(value) => [
+                      formatCurrency(value),
+                      "Income",
+                    ]}
+                    labelFormatter={(_, payload) =>
+                      payload?.[0]?.payload?.date
+                        ? formatDay(payload[0].payload.date)
+                        : ""
+                    }
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #E2E8F0",
+                      boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
+                      fontSize: 12,
+                    }}
+                  />
+
+                  <Line
+                    type="monotone"
+                    dataKey="amount"
+                    name="Income"
+                    stroke="#16A34A"
+                    strokeWidth={2.5}
+                    dot={{
+                      r: 3,
+                      fill: "#16A34A",
+                      stroke: "#FFFFFF",
+                      strokeWidth: 2,
+                    }}
+                    activeDot={{
+                      r: 6,
+                      fill: "#16A34A",
+                      stroke: "#FFFFFF",
+                      strokeWidth: 2,
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

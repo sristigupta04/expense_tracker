@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import Sidebar from "./Sidebar";
@@ -10,25 +10,26 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
 
-  const closeSidebar = () => {
+  const closeSidebar = useCallback(() => {
     setSidebarOpen(false);
-  };
+  }, []);
 
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     setSidebarOpen((previous) => !previous);
-  };
+  }, []);
 
-  // Close mobile sidebar and reset scroll on route change
+  // Close sidebar and reset scroll when route changes
   useEffect(() => {
     closeSidebar();
+
     window.scrollTo({
       top: 0,
       left: 0,
       behavior: "auto",
     });
-  }, [location.pathname]);
+  }, [location.pathname, closeSidebar]);
 
-  // Close sidebar with Escape and prevent background scrolling
+  // Handle Escape and prevent background scrolling
   useEffect(() => {
     if (!sidebarOpen) return undefined;
 
@@ -47,27 +48,30 @@ export default function AppLayout() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [sidebarOpen]);
+  }, [sidebarOpen, closeSidebar]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
-      <Sidebar
-        open={sidebarOpen}
-        onClose={closeSidebar}
-      />
+      {/* Sidebar */}
+      <Sidebar open={sidebarOpen} onClose={closeSidebar} />
 
+      {/* Main application area */}
       <div className="min-h-screen lg:pl-[260px]">
         <Navbar onMenuClick={toggleSidebar} />
 
         <main
           id="main-content"
-          className="mx-auto min-h-[calc(100vh-76px)] w-full max-w-[1800px] px-4 py-6 pb-24 sm:px-6 sm:py-8 lg:px-8 lg:pb-8"
+          tabIndex="-1"
+          className="mx-auto min-h-[calc(100vh-76px)] w-full max-w-[1800px] px-4 py-6 pb-24 outline-none sm:px-6 sm:py-8 lg:px-8 lg:pb-8"
         >
           <Outlet />
         </main>
       </div>
 
-      <MobileNavigation />
+      {/* Mobile bottom navigation */}
+      <div className="lg:hidden">
+        <MobileNavigation />
+      </div>
     </div>
   );
 }
