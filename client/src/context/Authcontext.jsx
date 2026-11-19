@@ -5,6 +5,7 @@ import {
   useCallback,
   useMemo,
   useContext,
+  useEffect,
 } from "react";
 
 import {
@@ -17,9 +18,38 @@ import {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => getCurrentUser());
+  const [user, setUser] = useState(() => {
+    try {
+      return checkAuthentication() ? getCurrentUser() : null;
+    } catch (error) {
+      console.error("Session restoration failed:", error);
+      return null;
+    }
+  });
+
   const [loading, setLoading] = useState(false);
 
+  // Synchronize expired sessions with React state
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null);
+      setLoading(false);
+    };
+
+    window.addEventListener(
+      "auth:session-expired",
+      handleSessionExpired
+    );
+
+    return () => {
+      window.removeEventListener(
+        "auth:session-expired",
+        handleSessionExpired
+      );
+    };
+  }, []);
+
+  // Login
   const login = useCallback(async (email, password) => {
     setLoading(true);
 
@@ -32,7 +62,7 @@ export function AuthProvider({ children }) {
 
         return {
           success: false,
-          message: "Login failed. Please check your credentials.",
+          message: "Unable to establish a valid session.",
         };
       }
 
@@ -57,6 +87,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Logout
   const logout = useCallback(() => {
     try {
       logoutService();
@@ -66,10 +97,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Refresh user
   const refreshUser = useCallback(() => {
     try {
-      const currentUser = getCurrentUser();
+      const currentUser = checkAuthentication()
+        ? getCurrentUser()
+        : null;
+
       setUser(currentUser || null);
+
       return currentUser || null;
     } catch (error) {
       console.error("Unable to refresh user:", error);
@@ -78,6 +114,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Update user
   const updateUser = useCallback((updatedUser) => {
     if (!updatedUser || typeof updatedUser !== "object") {
       return;
@@ -89,12 +126,16 @@ export function AuthProvider({ children }) {
     }));
   }, []);
 
+  const isAuthenticated = useMemo(
+    () => Boolean(user) && checkAuthentication(),
+    [user]
+  );
+
   const value = useMemo(
     () => ({
       user,
       loading,
-      isAuthenticated:
-        Boolean(user) && checkAuthentication(),
+      isAuthenticated,
       login,
       logout,
       refreshUser,
@@ -103,6 +144,7 @@ export function AuthProvider({ children }) {
     [
       user,
       loading,
+      isAuthenticated,
       login,
       logout,
       refreshUser,

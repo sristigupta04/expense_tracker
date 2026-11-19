@@ -19,6 +19,7 @@ import {
 const ACCOUNT_KEY = "expenseTrackerBankAccounts";
 const CARD_KEY = "expenseTrackerCreditCards";
 
+// Read browser storage safely
 function readStorage(key) {
   try {
     const data = JSON.parse(localStorage.getItem(key) || "[]");
@@ -26,6 +27,46 @@ function readStorage(key) {
   } catch {
     return [];
   }
+}
+
+// Normalize accounts created by different versions of the app
+function normalizeAccount(account) {
+  return {
+    ...account,
+    id: account.id || account._id,
+    accountName:
+      account.accountName || account.name || "Unnamed account",
+    bankName: account.bankName || "Bank",
+    accountType: account.accountType || account.type || "Account",
+    accountNumber:
+      account.accountNumber || account.lastFour || "",
+    currentBalance: Number(
+      account.currentBalance ??
+      account.openingBalance ??
+      account.balance ??
+      0
+    ),
+    openingBalance: Number(
+      account.openingBalance ?? account.balance ?? 0
+    ),
+    currency: account.currency || "INR",
+    status: account.status || "Active",
+  };
+}
+
+function normalizeCard(card) {
+  return {
+    ...card,
+    id: card.id || card._id,
+    cardName: card.cardName || card.name || "Credit Card",
+    bankName: card.bankName || card.issuer || "Bank",
+    creditLimit: Number(card.creditLimit || 0),
+    outstandingAmount: Number(
+      card.outstandingAmount ?? card.outstandingBalance ?? 0
+    ),
+    currency: card.currency || "INR",
+    status: card.status || "Active",
+  };
 }
 
 function toNumber(value) {
@@ -55,14 +96,14 @@ const quickActions = [
   {
     title: "Add Bank Account",
     description: "Add savings, salary or cash accounts.",
-    href: "/bank-accounts/add",
+    href: "/banking/accounts/add",
     icon: Plus,
     color: "blue",
   },
   {
     title: "Money Transfers",
     description: "Manage transfers between your accounts.",
-    href: "/money-transfers",
+    href: "/transfers",
     icon: ArrowLeftRight,
     color: "violet",
   },
@@ -98,31 +139,30 @@ const quickActions = [
 
 export default function BankingDashboard() {
   const accounts = useMemo(
-    () => readStorage(ACCOUNT_KEY),
+    () => readStorage(ACCOUNT_KEY).map(normalizeAccount),
     []
   );
 
   const cards = useMemo(
-    () => readStorage(CARD_KEY),
+    () => readStorage(CARD_KEY).map(normalizeCard),
     []
   );
 
   const activeAccounts = accounts.filter(isActive);
   const activeCards = cards.filter(isActive);
 
-  // Do not combine different currencies into one total.
+  // Only INR accounts are included in INR totals
   const inrAccounts = activeAccounts.filter(
-    (account) => (account.currency || "INR") === "INR"
+    (account) => account.currency === "INR"
   );
 
   const inrCards = activeCards.filter(
-    (card) => (card.currency || "INR") === "INR"
+    (card) => card.currency === "INR"
   );
 
   const inrBalance = inrAccounts.reduce(
     (total, account) =>
-      total +
-      toNumber(account.currentBalance ?? account.openingBalance),
+      total + toNumber(account.currentBalance),
     0
   );
 
@@ -132,7 +172,8 @@ export default function BankingDashboard() {
   );
 
   const totalOutstanding = inrCards.reduce(
-    (total, card) => total + toNumber(card.outstandingAmount),
+    (total, card) =>
+      total + toNumber(card.outstandingAmount),
     0
   );
 
@@ -201,7 +242,7 @@ export default function BankingDashboard() {
           </div>
 
           <Link
-            to="/bank-accounts/add"
+            to="/banking/accounts/add"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#03045E]"
           >
             <Plus size={18} />
@@ -301,7 +342,7 @@ export default function BankingDashboard() {
                 </p>
 
                 <Link
-                  to="/bank-accounts/add"
+                  to="/banking/accounts/add"
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#0D21A1] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#03045E]"
                 >
                   <Plus size={16} />
@@ -313,26 +354,23 @@ export default function BankingDashboard() {
                 {activeAccounts.slice(0, 5).map((account) => (
                   <Link
                     key={account.id}
-                    to={`/bank-accounts/${account.id}`}
+                    to={`/bank-accounts/${encodeURIComponent(account.id)}`}
                     className="flex flex-col justify-between gap-3 rounded-xl border border-slate-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/50 sm:flex-row sm:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 font-bold text-[#0D21A1]">
-                        {(account.bankName || "B")
-                          .charAt(0)
-                          .toUpperCase()}
+                        {account.bankName.charAt(0).toUpperCase()}
                       </div>
 
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-900">
-                          {account.accountName || "Unnamed account"}
+                          {account.accountName}
                         </p>
 
                         <p className="mt-1 truncate text-xs text-slate-500">
-                          {account.bankName || "Bank"} ·{" "}
-                          {account.accountType || "Account"}
+                          {account.bankName} · {account.accountType}
                           {account.accountNumber
-                            ? ` · •••• ${account.accountNumber}`
+                            ? ` · •••• ${String(account.accountNumber).slice(-4)}`
                             : ""}
                         </p>
                       </div>
@@ -340,9 +378,8 @@ export default function BankingDashboard() {
 
                     <p className="break-words font-bold text-slate-900 sm:text-right">
                       {formatMoney(
-                        account.currentBalance ??
-                          account.openingBalance,
-                        account.currency || "INR"
+                        account.currentBalance,
+                        account.currency
                       )}
                     </p>
                   </Link>

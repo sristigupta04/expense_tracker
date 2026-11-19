@@ -1,3 +1,4 @@
+
 import axios from "axios";
 
 const api = axios.create({
@@ -8,7 +9,7 @@ const api = axios.create({
   },
 });
 
-// Attach JWT token
+// Attach JWT
 api.interceptors.request.use(
   (config) => {
     const token =
@@ -25,9 +26,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Centralized error handling
+// Centralized response handling
 api.interceptors.response.use(
   (response) => response,
+
   (error) => {
     if (error.code === "ECONNABORTED") {
       error.message = "Request timed out. Please try again.";
@@ -35,16 +37,38 @@ api.interceptors.response.use(
       error.message =
         "Cannot connect to the server. Check whether your backend is running.";
     } else {
+      const status = error.response.status;
       const serverMessage = error.response.data?.message;
 
-      if (serverMessage) {
+      if (status === 401) {
+        const requestUrl = error.config?.url || "";
+
+        // Do not clear session for failed login/register requests.
+        const isAuthRequest =
+          /\/auth\/(login|register|forgot-password|reset-password)(\?|$)/.test(
+            requestUrl
+          );
+
+        if (!isAuthRequest && typeof window !== "undefined") {
+          localStorage.removeItem("token");
+          localStorage.removeItem("currentUser");
+
+          // Notify React application to synchronize auth state.
+          window.dispatchEvent(
+            new Event("auth:session-expired")
+          );
+        }
+
+        error.message =
+          serverMessage || "Session expired. Please log in again.";
+      } else if (status === 403) {
+        error.message =
+          serverMessage || "You do not have permission to perform this action.";
+      } else if (status >= 500) {
+        error.message =
+          serverMessage || "Server error. Please try again later.";
+      } else if (serverMessage) {
         error.message = serverMessage;
-      } else if (error.response.status === 401) {
-        error.message = "Session expired. Please log in again.";
-      } else if (error.response.status === 403) {
-        error.message = "You do not have permission to perform this action.";
-      } else if (error.response.status >= 500) {
-        error.message = "Server error. Please try again later.";
       }
     }
 

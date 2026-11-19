@@ -35,8 +35,28 @@ function readAccounts() {
   }
 }
 
+function normalizeAccount(account) {
+  return {
+    ...account,
+    accountName: account.accountName || account.name || "",
+    bankName: account.bankName || "",
+    accountType: account.accountType || account.type || "Savings",
+    accountNumber: String(
+      account.accountNumber || account.lastFour || ""
+    ),
+    openingBalance:
+      account.openingBalance ??
+      account.balance ??
+      account.currentBalance ??
+      0,
+    currency: account.currency || "INR",
+    status: account.status || "Active",
+    notes: account.notes || "",
+  };
+}
+
 export default function EditBankAccount() {
-  const { id } = useParams();
+  const { accountId } = useParams();
   const navigate = useNavigate();
 
   const [form, setForm] = useState(initialForm);
@@ -50,7 +70,8 @@ export default function EditBankAccount() {
     const accounts = readAccounts();
 
     const account = accounts.find(
-      (item) => String(item.id) === String(id)
+      (item) =>
+        String(item.id || item._id) === String(accountId)
     );
 
     if (!account) {
@@ -59,19 +80,21 @@ export default function EditBankAccount() {
       return;
     }
 
+    const normalized = normalizeAccount(account);
+
     setForm({
-      accountName: account.accountName || "",
-      bankName: account.bankName || "",
-      accountType: account.accountType || "Savings",
-      accountNumber: String(account.accountNumber || ""),
-      openingBalance: String(account.openingBalance ?? 0),
-      currency: account.currency || "INR",
-      status: account.status || "Active",
-      notes: account.notes || "",
+      accountName: normalized.accountName,
+      bankName: normalized.bankName,
+      accountType: normalized.accountType,
+      accountNumber: normalized.accountNumber,
+      openingBalance: String(normalized.openingBalance),
+      currency: normalized.currency,
+      status: normalized.status,
+      notes: normalized.notes,
     });
 
     setLoading(false);
-  }, [id]);
+  }, [accountId]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -88,10 +111,10 @@ export default function EditBankAccount() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    if (saving) return;
+
     setError("");
     setSuccess("");
-
-    if (saving) return;
 
     const accountName = form.accountName.trim();
     const bankName = form.bankName.trim();
@@ -121,7 +144,8 @@ export default function EditBankAccount() {
     const accounts = readAccounts();
 
     const index = accounts.findIndex(
-      (item) => String(item.id) === String(id)
+      (item) =>
+        String(item.id || item._id) === String(accountId)
     );
 
     if (index === -1) {
@@ -129,14 +153,17 @@ export default function EditBankAccount() {
       return;
     }
 
-    // Prevent duplicate bank account records
-    const duplicate = accounts.some(
-      (item, accountIndex) =>
-        accountIndex !== index &&
-        String(item.accountNumber) === accountNumber &&
-        String(item.bankName || "").trim().toLowerCase() ===
+    const duplicate = accounts.some((item, accountIndex) => {
+      if (accountIndex === index) return false;
+
+      const existing = normalizeAccount(item);
+
+      return (
+        existing.accountNumber === accountNumber &&
+        existing.bankName.trim().toLowerCase() ===
           bankName.toLowerCase()
-    );
+      );
+    });
 
     if (duplicate) {
       setError(
@@ -149,28 +176,43 @@ export default function EditBankAccount() {
 
     const updatedAccount = {
       ...existingAccount,
+
+      // New and legacy field compatibility
       accountName,
+      name: accountName,
+
       bankName,
+
       accountType: form.accountType,
+      type: form.accountType,
+
       accountNumber,
+      lastFour: accountNumber,
+
       openingBalance,
+      balance: openingBalance,
+
       currency: form.currency,
       status: form.status,
       notes: form.notes.trim(),
+
       updatedAt: new Date().toISOString(),
     };
-
-    accounts[index] = updatedAccount;
 
     setSaving(true);
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+      accounts[index] = updatedAccount;
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(accounts)
+      );
 
       setSuccess("Bank account updated successfully.");
 
       window.setTimeout(() => {
-        navigate(`/bank-accounts/${id}`);
+        navigate(`/bank-accounts/${encodeURIComponent(accountId)}`);
       }, 700);
     } catch {
       setError(
@@ -218,11 +260,9 @@ export default function EditBankAccount() {
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl space-y-6">
-
-        {/* Header */}
         <header>
           <Link
-            to={`/bank-accounts/${id}`}
+            to={`/bank-accounts/${encodeURIComponent(accountId)}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-[#0D21A1]"
           >
             <ArrowLeft size={17} />
@@ -250,7 +290,6 @@ export default function EditBankAccount() {
           </div>
         </header>
 
-        {/* Alerts */}
         {error && (
           <div
             role="alert"
@@ -271,11 +310,8 @@ export default function EditBankAccount() {
           </div>
         )}
 
-        {/* Form */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-7">
-
-            {/* Account Information */}
             <div>
               <SectionHeading
                 title="Account Information"
@@ -352,7 +388,6 @@ export default function EditBankAccount() {
 
             <div className="border-t border-slate-100" />
 
-            {/* Balance */}
             <div>
               <SectionHeading
                 title="Account Balance"
@@ -391,7 +426,6 @@ export default function EditBankAccount() {
 
             <div className="border-t border-slate-100" />
 
-            {/* Status and Notes */}
             <div>
               <SectionHeading
                 title="Account Preferences"
@@ -425,7 +459,6 @@ export default function EditBankAccount() {
               </div>
             </div>
 
-            {/* Security Notice */}
             <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
               <ShieldCheck
                 size={19}
@@ -439,10 +472,9 @@ export default function EditBankAccount() {
               </p>
             </div>
 
-            {/* Actions */}
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
               <Link
-                to={`/bank-accounts/${id}`}
+                to={`/bank-accounts/${encodeURIComponent(accountId)}`}
                 className="rounded-xl border border-slate-200 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel

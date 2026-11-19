@@ -16,15 +16,42 @@ import {
 
 const STORAGE_KEY = "expenseTrackerBankAccounts";
 
+// Read accounts from localStorage
 function readAccounts() {
   try {
     const accounts = JSON.parse(
       localStorage.getItem(STORAGE_KEY) || "[]"
     );
+
     return Array.isArray(accounts) ? accounts : [];
   } catch {
     return [];
   }
+}
+
+// Normalize old and new account formats
+function normalizeAccount(account) {
+  return {
+    ...account,
+    id: account.id || account._id,
+    accountName:
+      account.accountName || account.name || "Bank Account",
+    bankName: account.bankName || "Bank",
+    accountType: account.accountType || account.type || "Account",
+    accountNumber:
+      account.accountNumber || account.lastFour || "",
+    currentBalance: Number(
+      account.currentBalance ??
+      account.openingBalance ??
+      account.balance ??
+      0
+    ),
+    openingBalance: Number(
+      account.openingBalance ?? account.balance ?? 0
+    ),
+    currency: account.currency || "INR",
+    status: account.status || "Active",
+  };
 }
 
 function toNumber(value) {
@@ -32,6 +59,7 @@ function toNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+// Currency formatter
 function money(amount, currency = "INR") {
   try {
     return new Intl.NumberFormat("en-IN", {
@@ -44,10 +72,12 @@ function money(amount, currency = "INR") {
   }
 }
 
+// Date formatter
 function formatDate(value) {
   if (!value) return "—";
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "—";
 
   return date.toLocaleDateString("en-IN", {
@@ -57,10 +87,12 @@ function formatDate(value) {
   });
 }
 
+// Information row
 function InfoRow({ label, value }) {
   return (
     <div className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <span className="text-sm text-slate-500">{label}</span>
+
       <span className="break-words text-sm font-semibold text-slate-800 sm:text-right">
         {value || "—"}
       </span>
@@ -68,6 +100,7 @@ function InfoRow({ label, value }) {
   );
 }
 
+// Reusable action link
 function ActionLink({ to, icon: Icon, children }) {
   return (
     <Link
@@ -78,6 +111,7 @@ function ActionLink({ to, icon: Icon, children }) {
         <Icon size={17} />
         {children}
       </span>
+
       <ArrowUpRight size={16} />
     </Link>
   );
@@ -85,14 +119,23 @@ function ActionLink({ to, icon: Icon, children }) {
 
 export default function BankAccountDetails() {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { accountId } = useParams();
 
+  // Find account by ID
   const account = useMemo(() => {
-    return readAccounts().find(
-      (item) => String(item.id) === String(id)
-    ) || null;
-  }, [id]);
+    const accounts = readAccounts();
 
+    const foundAccount = accounts.find(
+      (item) =>
+        String(item.id || item._id) === String(accountId)
+    );
+
+    return foundAccount
+      ? normalizeAccount(foundAccount)
+      : null;
+  }, [accountId]);
+
+  // Account not found
   if (!account) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6">
@@ -121,26 +164,27 @@ export default function BankAccountDetails() {
     );
   }
 
-  const balance = toNumber(
-    account.currentBalance ?? account.openingBalance
-  );
-
+  const balance = toNumber(account.currentBalance);
   const openingBalance = toNumber(account.openingBalance);
-  const currency = account.currency || "INR";
+  const currency = account.currency;
   const isArchived = account.status === "Archived";
 
+  const accountNumber = account.accountNumber
+    ? String(account.accountNumber).slice(-4)
+    : "";
+
   const details = [
-    ["Account nickname", account.accountName || "—"],
-    ["Bank / Provider", account.bankName || "—"],
-    ["Account type", account.accountType || "—"],
+    ["Account nickname", account.accountName],
+    ["Bank / Provider", account.bankName],
+    ["Account type", account.accountType],
     [
       "Last 4 digits",
-      account.accountNumber
-        ? `•••• ${String(account.accountNumber).slice(-4)}`
+      accountNumber
+        ? `•••• ${accountNumber}`
         : "Not provided",
     ],
     ["Currency", currency],
-    ["Status", account.status || "Active"],
+    ["Status", account.status],
     ["Date added", formatDate(account.createdAt)],
   ];
 
@@ -148,14 +192,14 @@ export default function BankAccountDetails() {
     <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
 
-        {/* Back navigation */}
+        {/* Back Navigation */}
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/bank-accounts")}
           className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#0D21A1]"
         >
           <ArrowLeft size={17} />
-          Back
+          Back to Accounts
         </button>
 
         {/* Header */}
@@ -166,17 +210,17 @@ export default function BankAccountDetails() {
             </p>
 
             <h1 className="mt-2 break-words text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-              {account.accountName || "Bank Account"}
+              {account.accountName}
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              {account.bankName || "Bank"} · {account.accountType || "Account"}
+              {account.bankName} · {account.accountType}
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Link
-              to={`/bank-accounts/${account.id}/edit`}
+              to={`/banking/accounts/${encodeURIComponent(account.id)}/edit`}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               <Pencil size={16} />
@@ -184,7 +228,7 @@ export default function BankAccountDetails() {
             </Link>
 
             <Link
-              to="/money-transfers"
+              to="/transfers"
               className="inline-flex items-center gap-2 rounded-xl bg-[#0D21A1] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#03045E]"
             >
               <ArrowUpRight size={16} />
@@ -196,6 +240,7 @@ export default function BankAccountDetails() {
         {/* Balance Overview */}
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#03045E] via-[#023E8A] to-[#2563EB] p-6 text-white shadow-lg sm:p-8">
           <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border border-white/10" />
+
           <div className="pointer-events-none absolute -right-5 -top-5 h-40 w-40 rounded-full border border-white/10" />
 
           <div className="relative">
@@ -203,7 +248,9 @@ export default function BankAccountDetails() {
               <div>
                 <div className="flex items-center gap-2 text-blue-100">
                   <Wallet size={18} />
-                  <p className="text-sm font-medium">Current balance</p>
+                  <p className="text-sm font-medium">
+                    Current balance
+                  </p>
                 </div>
 
                 <h2 className="mt-3 break-words text-3xl font-extrabold sm:text-4xl">
@@ -211,10 +258,10 @@ export default function BankAccountDetails() {
                 </h2>
 
                 <p className="mt-3 text-sm text-blue-100">
-                  {account.bankName || "Bank"} · ••••{" "}
-                  {account.accountNumber
-                    ? String(account.accountNumber).slice(-4)
-                    : "----"}
+                  {account.bankName}
+                  {accountNumber
+                    ? ` · •••• ${accountNumber}`
+                    : " · Cash / No account number"}
                 </p>
               </div>
 
@@ -226,22 +273,28 @@ export default function BankAccountDetails() {
                 }`}
               >
                 <span className="h-2 w-2 rounded-full bg-current" />
-                {account.status || "Active"}
+                {account.status}
               </span>
             </div>
 
             <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-white/15 bg-white/10 p-4">
-                <p className="text-sm text-blue-100">Opening balance</p>
+                <p className="text-sm text-blue-100">
+                  Opening balance
+                </p>
+
                 <p className="mt-2 text-xl font-bold">
                   {money(openingBalance, currency)}
                 </p>
               </div>
 
               <div className="rounded-xl border border-white/15 bg-white/10 p-4">
-                <p className="text-sm text-blue-100">Account type</p>
+                <p className="text-sm text-blue-100">
+                  Account type
+                </p>
+
                 <p className="mt-2 text-xl font-bold">
-                  {account.accountType || "Savings"}
+                  {account.accountType}
                 </p>
               </div>
             </div>
@@ -262,6 +315,7 @@ export default function BankAccountDetails() {
                 <h2 className="text-lg font-bold text-slate-900">
                   Account Information
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   Saved account details
                 </p>
@@ -339,7 +393,9 @@ export default function BankAccountDetails() {
             <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
               <div className="flex items-center gap-2 text-[#0D21A1]">
                 <ShieldCheck size={19} />
-                <h2 className="font-bold">Account Information</h2>
+                <h2 className="font-bold">
+                  Account Information
+                </h2>
               </div>
 
               <p className="mt-2 text-sm leading-6 text-blue-900/75">

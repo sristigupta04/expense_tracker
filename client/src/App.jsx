@@ -1,5 +1,5 @@
 
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./context/Authcontext";
 
@@ -24,7 +24,7 @@ import RecurringExpenses from "./pages/RecurringExpenses";
 import SharedExpenses from "./pages/SharedExpenses";
 import Notifications from "./pages/Notifications";
 
-// Banking pages — actual folder: src/pages/banking/
+// Banking
 import BankAccounts from "./pages/BankAccounts";
 import BankingDashboard from "./pages/banking/BankingDashboard";
 import AddBankAccount from "./pages/banking/AddBankAccount";
@@ -42,14 +42,13 @@ import TransferDetails from "./pages/banking/TransferDetails";
 import Reconciliation from "./pages/banking/Reconciliation";
 import ReconciliationDetails from "./pages/banking/ReconciliationDetails";
 
-// Settings pages
+// Settings
 import ProfileSettings from "./pages/settings/ProfileSettings";
 import AppearanceSettings from "./pages/settings/AppearanceSettings";
 import NotificationSettings from "./pages/settings/NotificationSettings";
 import PreferencesSettings from "./pages/settings/PreferencesSettings";
 import PrivacySecuritySettings from "./pages/settings/PrivacySecuritySettings";
 import ContactSupport from "./pages/settings/ContactSupport";
-import HelpSupport from "./pages/settings/HelpSupportSettings";
 
 // Account management
 import AccountManagement from "./pages/settings/account/AccountManagement";
@@ -59,9 +58,10 @@ import DeleteAccount from "./pages/settings/account/DeleteAccount";
 // 404
 import NotFound from "./pages/NotFound";
 
-// Protected route
+// Protected Route
 function ProtectedRoute({ children }) {
   const { loading, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -72,15 +72,22 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   return children;
 }
 
-// Guest route
+// Guest Route
 function GuestRoute({ children }) {
   const { loading, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -91,13 +98,18 @@ function GuestRoute({ children }) {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return (
+      <Navigate
+        to={location.state?.from || "/dashboard"}
+        replace
+      />
+    );
   }
 
   return children;
 }
 
-// Protected layout
+// Protected Application Layout
 function ProtectedLayout() {
   return (
     <ProtectedRoute>
@@ -106,11 +118,10 @@ function ProtectedLayout() {
   );
 }
 
-// Main application
 export default function App() {
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public Routes */}
       <Route
         path="/login"
         element={
@@ -129,24 +140,14 @@ export default function App() {
         }
       />
 
-      <Route
-        path="/forgot-password"
-        element={<ForgotPassword />}
-      />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
-      <Route
-        path="/reset-password"
-        element={<ResetPassword />}
-      />
-
-      {/* Protected routes */}
+      {/* Protected Routes */}
       <Route element={<ProtectedLayout />}>
-        <Route
-          index
-          element={<Navigate to="/dashboard" replace />}
-        />
+        <Route index element={<Navigate to="/dashboard" replace />} />
 
-        {/* Main pages */}
+        {/* Main Pages */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/budgets" element={<Budgets />} />
@@ -157,15 +158,12 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
 
-        {/* Banking overview */}
-        <Route path="/bank-accounts" element={<BankAccounts />} />
+        {/* Banking Dashboard */}
         <Route path="/banking" element={<BankingDashboard />} />
 
-        {/* Bank accounts */}
-        <Route
-          path="/banking/accounts/add"
-          element={<AddBankAccount />}
-        />
+        {/* Bank Accounts */}
+        <Route path="/bank-accounts" element={<BankAccounts />} />
+        <Route path="/banking/accounts/add" element={<AddBankAccount />} />
         <Route
           path="/banking/accounts/:accountId"
           element={<BankAccountDetails />}
@@ -175,13 +173,16 @@ export default function App() {
           element={<EditBankAccount />}
         />
 
-        {/* Banking transactions */}
+        {/* Bank Account URL compatibility */}
         <Route
-          path="/bank-transactions"
-          element={<BankTransactions />}
+          path="/bank-accounts/add"
+          element={<Navigate to="/banking/accounts/add" replace />}
         />
 
-        {/* Credit cards */}
+        {/* Bank Transactions */}
+        <Route path="/bank-transactions" element={<BankTransactions />} />
+
+        {/* Credit Cards */}
         <Route path="/credit-cards" element={<CreditCards />} />
         <Route
           path="/banking/credit-cards/add"
@@ -196,25 +197,40 @@ export default function App() {
           element={<EditCreditCard />}
         />
 
-        {/* Statements */}
+        {/* Credit Card URL compatibility */}
+        <Route
+          path="/credit-cards/add"
+          element={<Navigate to="/banking/credit-cards/add" replace />}
+        />
+
+        {/* Bank Statements */}
         <Route path="/bank-statements" element={<BankStatements />} />
         <Route
           path="/banking/statements/import"
           element={<ImportStatement />}
         />
 
-        {/* Transfers */}
+        {/* Statement URL compatibility */}
+        <Route
+          path="/bank-statements/import"
+          element={<Navigate to="/banking/statements/import" replace />}
+        />
+
+        {/* Money Transfers */}
         <Route path="/transfers" element={<MoneyTransfers />} />
         <Route
           path="/banking/transfers/:transferId"
           element={<TransferDetails />}
         />
 
-        {/* Reconciliation */}
+        {/* Transfer URL compatibility */}
         <Route
-          path="/reconciliation"
-          element={<Reconciliation />}
+          path="/money-transfers"
+          element={<Navigate to="/transfers" replace />}
         />
+
+        {/* Reconciliation */}
+        <Route path="/reconciliation" element={<Reconciliation />} />
         <Route
           path="/banking/reconciliation/:reconciliationId"
           element={<ReconciliationDetails />}
@@ -222,10 +238,7 @@ export default function App() {
 
         {/* Settings */}
         <Route path="/settings" element={<Settings />} />
-        <Route
-          path="/settings/profile"
-          element={<ProfileSettings />}
-        />
+        <Route path="/settings/profile" element={<ProfileSettings />} />
         <Route
           path="/settings/appearance"
           element={<AppearanceSettings />}
@@ -242,20 +255,20 @@ export default function App() {
           path="/settings/privacy"
           element={<PrivacySecuritySettings />}
         />
+        <Route path="/settings/contact" element={<ContactSupport />} />
+
+        {/* Help URL compatibility */}
         <Route
           path="/settings/help"
-          element={<HelpSupport />}
+          element={<Navigate to="/settings/contact" replace />}
         />
         <Route
-          path="/settings/contact"
-          element={<ContactSupport />}
+          path="/help"
+          element={<Navigate to="/settings/contact" replace />}
         />
 
-        {/* Account management */}
-        <Route
-          path="/settings/account"
-          element={<AccountManagement />}
-        />
+        {/* Account Management */}
+        <Route path="/settings/account" element={<AccountManagement />} />
         <Route
           path="/settings/account/deactivate"
           element={<DeactivateAccount />}
