@@ -57,7 +57,6 @@ import DeleteAccount from "./pages/settings/account/DeleteAccount";
 
 // 404
 import NotFound from "./pages/NotFound";
-
 // Protected Route
 function ProtectedRoute({ children }) {
   const { loading, isAuthenticated } = useAuth();
