@@ -1,9 +1,12 @@
+
 "use strict";
+
 const User = require("../models/user");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+
 // Generate JWT
 const generateToken = (user) => {
   if (!process.env.JWT_SECRET) {
@@ -113,9 +116,10 @@ const login = async (req, res) => {
       });
     }
 
+    // IMPORTANT: Explicitly select hidden password field.
     const user = await User.findOne({
       email: email.trim().toLowerCase(),
-    });
+    }).select("+password");
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({
@@ -135,35 +139,24 @@ const login = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Login failed. Check the User model and server logs.",
+      message: "Login failed.",
     });
   }
 };
 
-// Request password reset
-
-
+// Forgot Password
 const forgotPassword = async (req, res) => {
-  let user;
-
   try {
-    const email = String(req.body.email || "").trim().toLowerCase();
+    const email =
+      typeof req.body.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({
         success: false,
         message: "Please enter a valid email address.",
       });
-    }
-
-    user = await User.findOne({ email });
-
-    // Keep the response generic to protect account privacy.
-    const message =
-      "If an account matches that email, password reset instructions will be sent.";
-
-    if (!user) {
-      return res.status(200).json({ success: true, message });
     }
 
     if (
@@ -171,29 +164,44 @@ const forgotPassword = async (req, res) => {
       !(process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD) ||
       !process.env.CLIENT_URL
     ) {
-      console.error(
-        "Password reset email configuration is incomplete."
-      );
+      console.error("Password reset email configuration is incomplete.");
 
       return res.status(500).json({
         success: false,
-        message: "Email service is not configured on the server.",
+        message: "Email service is not configured.",
       });
     }
 
+    const message =
+      "If an account matches that email, password reset instructions will be sent.";
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message,
+      });
+    }
+
+    // Generate a secure random token.
     const resetToken = crypto.randomBytes(32).toString("hex");
 
+    // Store only its SHA-256 hash.
     const hashedToken = crypto
       .createHash("sha256")
       .update(resetToken)
       .digest("hex");
 
     user.resetPasswordToken = hashedToken;
-    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.resetPasswordExpires = new Date(
+      Date.now() + 15 * 60 * 1000
+    );
 
     await user.save();
 
     const clientUrl = process.env.CLIENT_URL.replace(/\/$/, "");
+
     const resetUrl =
       `${clientUrl}/reset-password?token=${resetToken}` +
       `&email=${encodeURIComponent(email)}`;
@@ -208,17 +216,19 @@ const forgotPassword = async (req, res) => {
 
     try {
       await transporter.sendMail({
-        from: `"Expense Tracker" <${process.env.EMAIL_USER}>`,
+        from: `"Finora" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: "Reset your Expense Tracker password",
-        text: `You requested a password reset. Open this link within 15 minutes: ${resetUrl}\n\nIf you did not request this, ignore this email.`,
+        subject: "Reset your Finora password",
+
+        text: `Reset your password within 15 minutes using this link: ${resetUrl}`,
+
         html: `
           <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#111827">
             <h2 style="color:#1729A8">Reset your password</h2>
-            <p>We received a request to reset your Expense Tracker password.</p>
+            <p>We received a request to reset your Finora password.</p>
             <p>
               <a href="${resetUrl}"
-                 style="display:inline-block;background:#1729A8;color:#fff;padding:13px 22px;border-radius:8px;text-decoration:none">
+                style="display:inline-block;background:#1729A8;color:#fff;padding:13px 22px;border-radius:8px;text-decoration:none">
                 Reset Password
               </a>
             </p>
@@ -234,15 +244,82 @@ const forgotPassword = async (req, res) => {
       throw emailError;
     }
 
-    console.log("Password reset email sent successfully.");
-
-    return res.status(200).json({ success: true, message });
+    return res.status(200).json({
+      success: true,
+      message,
+    });
   } catch (error) {
-    console.error("Forgot password email error:", error.message);
+    console.error("Forgot password error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: "Unable to send the reset email. Please try again later.",
+      message: "Unable to send reset email. Please try again later.",
+    });
+  }
+};
+
+// Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (
+      typeof token !== "string" ||
+      !token ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token and new password are required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least 8 characters.",
+      });
+    }
+
+    // Hash the incoming token to match the database value.
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    // Only accept tokens that have not expired.
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() },
+    }).select("+resetPasswordToken +resetPasswordExpires");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset link is invalid or has expired.",
+      });
+    }
+
+    // Hash the new password.
+    user.password = await bcrypt.hash(password, 12);
+
+    // Invalidate the reset token after successful use.
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful. Please log in.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to reset password. Please try again.",
     });
   }
 };
@@ -251,4 +328,5 @@ module.exports = {
   register,
   login,
   forgotPassword,
+  resetPassword,
 };

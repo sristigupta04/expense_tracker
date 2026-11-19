@@ -8,4 +8,4 @@ node_modules/
 
 # Build files
 dist/
-build/
+build/client.zip

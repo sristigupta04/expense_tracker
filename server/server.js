@@ -18,22 +18,39 @@ const sharedExpenseRoutes = require("./routes/sharedExpenseRoutes");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.disable("x-powered-by");
+
+// Allowed frontend origins
+const allowedOrigins = (
+  process.env.CLIENT_URL || "http://localhost:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
 // Middleware
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests without Origin (Postman/server-to-server).
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origin not allowed by CORS"));
+    },
     credentials: true,
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get("/", (req, res) => {
-  res.json({
+  res.status(200).json({
     success: true,
-    message: "Personal Finance Tracker API Running",
+    message: "Finora Personal Finance API Running",
   });
 });
 
@@ -51,7 +68,7 @@ app.use("/api/shared-expenses", sharedExpenseRoutes);
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: "Route Not Found",
+    message: "API route not found",
   });
 });
 
@@ -86,7 +103,7 @@ async function startServer() {
     console.log("MongoDB Connected");
 
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Finora server running on port ${PORT}`);
     });
   } catch (error) {
     console.error("Server startup failed:", error.message);
