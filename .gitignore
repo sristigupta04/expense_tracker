@@ -10,3 +10,6 @@ node_modules/
 dist/
 build/client.zip
 *.zip
+
+backend-audit.txt
+cleanup-history.sh
