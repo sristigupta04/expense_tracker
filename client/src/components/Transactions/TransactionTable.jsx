@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import formatDate from "../../utils/formatDate";
-import formatCurrency from "../../utils/formatcurrency";
+import formatCurrency from "../../utils/formatCurrency";
 
 export default function TransactionTable({
   transactions = [],

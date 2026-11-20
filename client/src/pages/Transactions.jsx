@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import useExpense from "../hooks/useExpense";
-import formatCurrency from "../utils/formatcurrency";
+import formatCurrency from "../utils/formatCurrency";
 
 const categories = [
   "Food",

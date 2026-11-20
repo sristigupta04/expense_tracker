@@ -7,7 +7,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-import formatCurrency from "../../utils/formatcurrency";
+import formatCurrency from "../../utils/formatCurrency";
 
 export default function BudgetCard({
   budget,

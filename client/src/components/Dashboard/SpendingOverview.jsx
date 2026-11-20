@@ -10,7 +10,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import Budgetprogress from "../Budget/Budgetprogress";
-import formatCurrency from "../../utils/formatcurrency";
+import formatCurrency from "../../utils/formatCurrency";
 
 const getAmount = (value) => {
   const amount = Number(value);
