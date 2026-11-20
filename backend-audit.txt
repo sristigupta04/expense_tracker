@@ -1,0 +1,4421 @@
+
+==================================================
+FILE: server.js
+==================================================
+
+require("dotenv").config();
+
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+
+// Routes
+const authRoutes = require("./routes/authRoute");
+const transactionRoutes = require("./routes/transactionRoute");
+const categoryRoutes = require("./routes/categoryRoute");
+const budgetRoutes = require("./routes/budgetRoute");
+const reportRoutes = require("./routes/reportRoute");
+const notificationRoutes = require("./routes/notificationRoute");
+const recurringTransactionRoutes = require("./routes/recurringTransactionRoute");
+const sharedExpenseRoutes = require("./routes/sharedExpenseRoutes");
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.disable("x-powered-by");
+
+// Allowed frontend origins
+const allowedOrigins = (
+  process.env.CLIENT_URL || "http://localhost:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+// Middleware
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests without Origin (Postman/server-to-server).
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origin not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// Health check
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Finora Personal Finance API Running",
+  });
+});
+
+// API routes
+app.use("/api/auth", authRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/budget", budgetRoutes);
+app.use("/api/report", reportRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/recurring-transactions", recurringTransactionRoutes);
+app.use("/api/shared-expenses", sharedExpenseRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API route not found",
+  });
+});
+
+// Central error handler
+app.use((err, req, res, next) => {
+  console.error("API Error:", err.message);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const status = err.status || err.statusCode || 500;
+
+  res.status(status).json({
+    success: false,
+    message:
+      status < 500
+        ? err.message
+        : "Internal server error.",
+  });
+});
+
+// Start server after database connection
+async function startServer() {
+  try {
+    if (!process.env.MONGO_URL) {
+      throw new Error("MONGO_URL is missing in server .env");
+    }
+
+    await mongoose.connect(process.env.MONGO_URL);
+
+    console.log("MongoDB Connected");
+
+    app.listen(PORT, () => {
+      console.log(`Finora server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
+  }
+}
+
+startServer();
+
+
+==================================================
+FILE: package.json
+==================================================
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.4",
+    "node-cron": "^4.4.1",
+    "nodemailer": "^10.2.1",
+    "pdfkit": "^0.19.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "prisma": "^7.10.1"
+  }
+}
+
+
+==================================================
+FILE: config/db.js
+==================================================
+
+const mongoose = require("mongoose");
+
+const connectDB = async () => {
+  try {
+    const mongoURL = process.env.MONGO_URL;
+
+    if (!mongoURL) {
+      throw new Error("MONGO_URL is missing from .env");
+    }
+
+    await mongoose.connect(mongoURL);
+
+    console.log("MongoDB connected successfully");
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    process.exit(1);
+  }
+};
+
+module.exports = connectDB;
+
+
+==================================================
+FILE: routes/authRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const {
+  register,
+  login,
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/authController");
+
+// Authentication
+router.post("/register", register);
+router.post("/login", login);
+
+// Password recovery
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/budgetRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const {
+  createBudget,
+  getBudget,
+  getBudgetById,
+  updateBudget,
+  deleteBudget,
+  getBudgetProgress,
+} = require("../controllers/budgetController");
+
+const authMiddleware = require("../middleware/auth");
+// All budget routes require login
+router.use(authMiddleware);
+
+// GET /api/budget
+router.get("/", getBudget);
+
+// GET /api/budget/progress
+router.get("/progress", getBudgetProgress);
+
+// GET /api/budget/:id
+router.get("/:id", getBudgetById);
+
+// POST /api/budget
+router.post("/", createBudget);
+
+// PUT /api/budget/:id
+router.put("/:id", updateBudget);
+
+// DELETE /api/budget/:id
+router.delete("/:id", deleteBudget);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/categoryRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const {
+  createCategory,
+  getCategories,
+  getCategoryById,
+  updateCategory,
+  deleteCategory,
+} = require("../controllers/categoryController");
+
+const authMiddleware = require("../middleware/auth");// Require authentication for all category routes
+router.use(authMiddleware);
+
+// GET /api/categories
+router.get("/", getCategories);
+
+// GET /api/categories/:id
+router.get("/:id", getCategoryById);
+
+// POST /api/categories
+router.post("/", createCategory);
+
+// PUT /api/categories/:id
+router.put("/:id", updateCategory);
+
+// DELETE /api/categories/:id
+router.delete("/:id", deleteCategory);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/notificationRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
+
+const {
+  getNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+} = require("../controllers/notificationController");
+
+router.get("/", authMiddleware, getNotifications);
+
+router.get("/unread-count", authMiddleware, getUnreadCount);
+
+router.patch("/read-all", authMiddleware, markAllNotificationsRead);
+
+router.patch("/:id/read", authMiddleware, markNotificationRead);
+
+router.delete("/:id", authMiddleware, deleteNotification);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/recurringTransactionRoute.js
+==================================================
+const express = require("express");
+const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
+const {
+  getRecurringTransactions,
+  createRecurringTransaction,
+  updateRecurringTransaction,
+  deleteRecurringTransaction,
+  markRecurringPaid,
+} = require("../controllers/recurringTransactionController");
+
+router.use(authMiddleware);
+
+router.get("/", getRecurringTransactions);
+router.post("/", createRecurringTransaction);
+router.patch("/:id", updateRecurringTransaction);
+router.patch("/:id/paid", markRecurringPaid);
+router.delete("/:id", deleteRecurringTransaction);
+
+module.exports = router;
+
+==================================================
+FILE: routes/reportRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
+
+const {
+  getDashboardReport,
+  getCategoryReport,
+  getMonthlyReport,
+} = require("../controllers/reportController");
+
+// All report routes require authentication
+router.use(authMiddleware);
+
+// GET /api/report
+router.get("/", getDashboardReport);
+
+// GET /api/report/category
+router.get("/category", getCategoryReport);
+
+// GET /api/report/monthly
+router.get("/monthly", getMonthlyReport);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/savingRoute.js
+==================================================
+const express = require("express");
+const router = express.Router();
+
+const {
+  createSaving,
+  getSavings,
+  getSavingById,
+  updateSaving,
+  deleteSaving,
+} = require("../controllers/savingController");
+
+const authMiddleware = require("../middleware/auth");
+
+router.use(authMiddleware);
+
+router.get("/", getSavings);
+router.get("/:id", getSavingById);
+router.post("/", createSaving);
+router.put("/:id", updateSaving);
+router.delete("/:id", deleteSaving);
+
+module.exports = router;
+
+==================================================
+FILE: routes/sharedExpenseRoutes.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
+
+const {
+  createGroup,
+  getGroups,
+  createSharedExpense,
+  getGroupExpenses,
+  getGroupBalances,
+  createSettlement,
+} = require("../controllers/sharedExpenseController");
+
+router.use(authMiddleware);
+
+router.get("/groups", getGroups);
+router.post("/groups", createGroup);
+
+router.get("/groups/:groupId/expenses", getGroupExpenses);
+router.get("/groups/:groupId/balances", getGroupBalances);
+
+router.post("/expenses", createSharedExpense);
+router.post("/settlements", createSettlement);
+
+module.exports = router;
+
+
+==================================================
+FILE: routes/transactionRoute.js
+==================================================
+
+const express = require("express");
+const router = express.Router();
+
+const authMiddleware = require("../middleware/auth");
+
+const {
+  addTransaction,
+  getTransactions,
+  getTransactionsById,
+  updateTransaction,
+  deleteTransactionById,
+  deleteTransaction,
+} = require("../controllers/transactionController");
+
+// All routes require authentication
+router.use(authMiddleware);
+
+// GET /api/transactions
+router.get("/", getTransactions);
+
+// POST /api/transactions
+router.post("/", addTransaction);
+
+// DELETE /api/transactions/all
+router.delete("/all", deleteTransaction);
+
+// GET /api/transactions/:id
+router.get("/:id", getTransactionsById);
+
+// PUT /api/transactions/:id
+router.put("/:id", updateTransaction);
+
+// DELETE /api/transactions/:id
+router.delete("/:id", deleteTransactionById);
+
+module.exports = router;
+
+
+==================================================
+FILE: controllers/authController.js
+==================================================
+
+"use strict";
+
+const User = require("../models/user");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
+
+// Generate JWT
+const generateToken = (user) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is missing in .env");
+  }
+
+  return jwt.sign(
+    {
+      id: user._id.toString(),
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+};
+
+// Safe user response
+const sendUserResponse = (user) => ({
+  id: user._id.toString(),
+  _id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  number: user.number || "",
+});
+
+// Register
+const register = async (req, res) => {
+  try {
+    const { name, email, number, password } = req.body;
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email and password are required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least 8 characters.",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      number: typeof number === "string" ? number.trim() : "",
+      password: hashedPassword,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Registration successful.",
+      token: generateToken(user),
+      user: sendUserResponse(user),
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+
+    return res.status(error.code === 11000 ? 409 : 500).json({
+      success: false,
+      message:
+        error.code === 11000
+          ? "An account with this email already exists."
+          : "Registration failed.",
+    });
+  }
+};
+
+// Login
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
+    }
+
+    // IMPORTANT: Explicitly select hidden password field.
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+    }).select("+password");
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful.",
+      token: generateToken(user),
+      user: sendUserResponse(user),
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Login failed.",
+    });
+  }
+};
+
+// Forgot Password
+const forgotPassword = async (req, res) => {
+  try {
+    const email =
+      typeof req.body.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
+      });
+    }
+
+    if (
+      !process.env.EMAIL_USER ||
+      !(process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD) ||
+      !process.env.CLIENT_URL
+    ) {
+      console.error("Password reset email configuration is incomplete.");
+
+      return res.status(500).json({
+        success: false,
+        message: "Email service is not configured.",
+      });
+    }
+
+    const message =
+      "If an account matches that email, password reset instructions will be sent.";
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message,
+      });
+    }
+
+    // Generate a secure random token.
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // Store only its SHA-256 hash.
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(
+      Date.now() + 15 * 60 * 1000
+    );
+
+    await user.save();
+
+    const clientUrl = process.env.CLIENT_URL.replace(/\/$/, "");
+
+    const resetUrl =
+      `${clientUrl}/reset-password?token=${resetToken}` +
+      `&email=${encodeURIComponent(email)}`;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: `"Finora" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Reset your Finora password",
+
+        text: `Reset your password within 15 minutes using this link: ${resetUrl}`,
+
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#111827">
+            <h2 style="color:#1729A8">Reset your password</h2>
+            <p>We received a request to reset your Finora password.</p>
+            <p>
+              <a href="${resetUrl}"
+                style="display:inline-block;background:#1729A8;color:#fff;padding:13px 22px;border-radius:8px;text-decoration:none">
+                Reset Password
+              </a>
+            </p>
+            <p>This link expires in 15 minutes and can only be used once.</p>
+            <p>If you did not request this, ignore this email.</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      user.resetPasswordToken = null;
+      user.resetPasswordExpires = null;
+      await user.save();
+      throw emailError;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message,
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to send reset email. Please try again later.",
+    });
+  }
+};
+
+// Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (
+      typeof token !== "string" ||
+      !token ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token and new password are required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least 8 characters.",
+      });
+    }
+
+    // Hash the incoming token to match the database value.
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    // Only accept tokens that have not expired.
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() },
+    }).select("+resetPasswordToken +resetPasswordExpires");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset link is invalid or has expired.",
+      });
+    }
+
+    // Hash the new password.
+    user.password = await bcrypt.hash(password, 12);
+
+    // Invalidate the reset token after successful use.
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful. Please log in.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to reset password. Please try again.",
+    });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  forgotPassword,
+  resetPassword,
+};
+
+
+==================================================
+FILE: controllers/budgetController.js
+==================================================
+
+const mongoose = require("mongoose");
+const Budget = require("../models/Budget");
+
+// GET /api/budget
+const getBudget = async (req, res, next) => {
+  try {
+    const budgets = await Budget.find({
+      user: req.user.id,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: budgets.length,
+      budgets,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/budget/:id
+const getBudgetById = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid budget ID",
+      });
+    }
+
+    const budget = await Budget.findOne({
+      _id: req.params.id,
+      user: req.user.id,
+    });
+
+    if (!budget) {
+      return res.status(404).json({
+        success: false,
+        message: "Budget not found",
+      });
+    }
+
+    res.status(200).json({ success: true, budget });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/budget
+const createBudget = async (req, res, next) => {
+  try {
+    const { category, limit, month, year } = req.body;
+
+    if (!category || limit === undefined || limit === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Category and budget limit are required",
+      });
+    }
+
+    const numericLimit = Number(limit);
+
+    if (!Number.isFinite(numericLimit) || numericLimit <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Budget limit must be greater than zero",
+      });
+    }
+
+    const budget = await Budget.create({
+      user: req.user.id,
+      category: String(category).trim(),
+      limit: numericLimit,
+      month: month ?? new Date().getMonth() + 1,
+      year: year ?? new Date().getFullYear(),
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Budget created successfully",
+      budget,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/budget/progress
+const getBudgetProgress = async (req, res, next) => {
+  try {
+    const budgets = await Budget.find({
+      user: req.user.id,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: budgets.length,
+      budgets,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/budget/:id
+const updateBudget = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid budget ID",
+      });
+    }
+
+    const updates = {};
+    const { category, limit, month, year } = req.body;
+
+    if (category !== undefined) {
+      if (!String(category).trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Category cannot be empty",
+        });
+      }
+      updates.category = String(category).trim();
+    }
+
+    if (limit !== undefined) {
+      const numericLimit = Number(limit);
+
+      if (!Number.isFinite(numericLimit) || numericLimit <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Budget limit must be greater than zero",
+        });
+      }
+      updates.limit = numericLimit;
+    }
+
+    if (month !== undefined) {
+      const numericMonth = Number(month);
+
+      if (
+        !Number.isInteger(numericMonth) ||
+        numericMonth < 1 ||
+        numericMonth > 12
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Month must be between 1 and 12",
+        });
+      }
+      updates.month = numericMonth;
+    }
+
+    if (year !== undefined) {
+      const numericYear = Number(year);
+
+      if (!Number.isInteger(numericYear) || numericYear < 2000) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid budget year",
+        });
+      }
+      updates.year = numericYear;
+    }
+
+    const budget = await Budget.findOneAndUpdate(
+      { _id: req.params.id, user: req.user.id },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!budget) {
+      return res.status(404).json({
+        success: false,
+        message: "Budget not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Budget updated successfully",
+      budget,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/budget/:id
+const deleteBudget = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid budget ID",
+      });
+    }
+
+    const budget = await Budget.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user.id,
+    });
+
+    if (!budget) {
+      return res.status(404).json({
+        success: false,
+        message: "Budget not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Budget deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  createBudget,
+  getBudget,
+  getBudgetById,
+  updateBudget,
+  deleteBudget,
+  getBudgetProgress,
+};
+
+
+==================================================
+FILE: controllers/categoryController.js
+==================================================
+
+const mongoose = require("mongoose");
+const Category = require("../models/Category");
+
+const getUserId = (req, res) => {
+  const userId = req.user?.id || req.user?._id;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Invalid user session. Please log in again.",
+    });
+    return null;
+  }
+
+  return userId;
+};
+
+// GET /api/categories
+exports.getCategories = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const categories = await Category.find({ user: userId }).sort({
+      name: 1,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: categories.length,
+      categories,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/categories/:id
+exports.getCategoryById = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category ID.",
+      });
+    }
+
+    const category = await Category.findOne({
+      _id: req.params.id,
+      user: userId,
+    });
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found.",
+      });
+    }
+
+    res.status(200).json({ success: true, category });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/categories
+exports.createCategory = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const { name, type, color, icon } = req.body;
+
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Category name is required.",
+      });
+    }
+
+    const categoryData = {
+      name: name.trim(),
+      user: userId,
+    };
+
+    if (type !== undefined) categoryData.type = type;
+    if (color !== undefined) categoryData.color = color;
+    if (icon !== undefined) categoryData.icon = icon;
+
+    const category = await Category.create(categoryData);
+
+    res.status(201).json({
+      success: true,
+      message: "Category created successfully.",
+      category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/categories/:id
+exports.updateCategory = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category ID.",
+      });
+    }
+
+    const allowedFields = ["name", "type", "color", "icon"];
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (
+      updates.name !== undefined &&
+      (typeof updates.name !== "string" || !updates.name.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Category name cannot be empty.",
+      });
+    }
+
+    if (updates.name !== undefined) {
+      updates.name = updates.name.trim();
+    }
+
+    const category = await Category.findOneAndUpdate(
+      { _id: req.params.id, user: userId },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Category updated successfully.",
+      category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/categories/:id
+exports.deleteCategory = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category ID.",
+      });
+    }
+
+    const category = await Category.findOneAndDelete({
+      _id: req.params.id,
+      user: userId,
+    });
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Category deleted successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+==================================================
+FILE: controllers/notificationController.js
+==================================================
+const mongoose = require("mongoose");
+const Notification = require("../models/notification");
+
+// GET /api/notifications
+const getNotifications = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const notifications = await Notification.find({
+      user: userId,
+    }).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: notifications.length,
+      notifications,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/notifications/unread-count
+const getUnreadCount = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const count = await Notification.countDocuments({
+      user: userId,
+      isRead: false,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /api/notifications/:id/read
+const markNotificationRead = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid notification ID",
+      });
+    }
+
+    const notification = await Notification.findOneAndUpdate(
+      { _id: id, user: userId },
+      { $set: { isRead: true } },
+      { new: true, runValidators: true }
+    );
+
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification marked as read",
+      notification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /api/notifications/read-all
+const markAllNotificationsRead = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const result = await Notification.updateMany(
+      { user: userId, isRead: false },
+      { $set: { isRead: true } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "All notifications marked as read",
+      updatedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/notifications/:id
+const deleteNotification = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid notification ID",
+      });
+    }
+
+    const notification = await Notification.findOneAndDelete({
+      _id: id,
+      user: userId,
+    });
+
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+};
+
+
+==================================================
+FILE: controllers/recurringTransactionController.js
+==================================================
+"use strict";
+
+const mongoose = require("mongoose");
+const RecurringTransaction = require("../models/RecurringTransaction");
+const Transaction = require("../models/Transaction");
+
+const validFrequencies = ["weekly", "monthly", "yearly"];
+const validTypes = ["income", "expense"];
+
+function getUserId(req) {
+  const userId = req.user?.id || req.user?._id;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    return null;
+  }
+
+  return userId;
+}
+
+function getNextDueDate(date, frequency) {
+  const next = new Date(date);
+
+  if (frequency === "weekly") {
+    next.setDate(next.getDate() + 7);
+  } else if (frequency === "monthly") {
+    const originalDay = next.getDate();
+
+    next.setDate(1);
+    next.setMonth(next.getMonth() + 1);
+
+    const lastDay = new Date(
+      next.getFullYear(),
+      next.getMonth() + 1,
+      0
+    ).getDate();
+
+    next.setDate(Math.min(originalDay, lastDay));
+  } else if (frequency === "yearly") {
+    const originalMonth = next.getMonth();
+    const originalDay = next.getDate();
+
+    next.setDate(1);
+    next.setFullYear(next.getFullYear() + 1);
+    next.setMonth(originalMonth);
+
+    const lastDay = new Date(
+      next.getFullYear(),
+      originalMonth + 1,
+      0
+    ).getDate();
+
+    next.setDate(Math.min(originalDay, lastDay));
+  }
+
+  return next;
+}
+
+function sendError(res, status, message) {
+  return res.status(status).json({
+    success: false,
+    message,
+  });
+}
+
+// GET /api/recurring-transactions
+exports.getRecurringTransactions = async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return sendError(res, 401, "Please log in again.");
+    }
+
+    const records = await RecurringTransaction.find({
+      user: userId,
+    }).sort({ nextDueDate: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: records.length,
+      records,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/recurring-transactions
+exports.createRecurringTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return sendError(res, 401, "Please log in again.");
+    }
+
+    const {
+      title,
+      amount,
+      type,
+      category,
+      frequency = "monthly",
+      startDate,
+      endDate,
+      note = "",
+    } = req.body;
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      typeof category !== "string" ||
+      !category.trim() ||
+      !validTypes.includes(type) ||
+      !validFrequencies.includes(frequency) ||
+      amount === "" ||
+      amount === null ||
+      amount === undefined ||
+      !Number.isFinite(Number(amount)) ||
+      Number(amount) <= 0 ||
+      !startDate
+    ) {
+      return sendError(
+        res,
+        400,
+        "Please provide valid title, amount, type, category, frequency and start date."
+      );
+    }
+
+    const parsedStartDate = new Date(startDate);
+
+    if (Number.isNaN(parsedStartDate.getTime())) {
+      return sendError(res, 400, "Invalid start date.");
+    }
+
+    let parsedEndDate = null;
+
+    if (endDate !== undefined && endDate !== null && endDate !== "") {
+      parsedEndDate = new Date(endDate);
+
+      if (
+        Number.isNaN(parsedEndDate.getTime()) ||
+        parsedEndDate < parsedStartDate
+      ) {
+        return sendError(
+          res,
+          400,
+          "End date must be valid and cannot precede start date."
+        );
+      }
+    }
+
+    if (typeof note !== "string") {
+      return sendError(res, 400, "Note must be text.");
+    }
+
+    const record = await RecurringTransaction.create({
+      user: userId,
+      title: title.trim(),
+      amount: Number(amount),
+      type,
+      category: category.trim(),
+      frequency,
+      startDate: parsedStartDate,
+      nextDueDate: parsedStartDate,
+      endDate: parsedEndDate,
+      note: note.trim(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Recurring transaction created successfully.",
+      record,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /api/recurring-transactions/:id
+exports.updateRecurringTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return sendError(res, 401, "Please log in again.");
+    }
+
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return sendError(res, 400, "Invalid recurring transaction ID.");
+    }
+
+    const allowedFields = [
+      "title",
+      "amount",
+      "type",
+      "category",
+      "frequency",
+      "nextDueDate",
+      "endDate",
+      "note",
+      "isActive",
+    ];
+
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return sendError(res, 400, "No valid fields provided to update.");
+    }
+
+    if (updates.title !== undefined) {
+      if (typeof updates.title !== "string" || !updates.title.trim()) {
+        return sendError(res, 400, "Title cannot be empty.");
+      }
+
+      updates.title = updates.title.trim();
+    }
+
+    if (updates.category !== undefined) {
+      if (
+        typeof updates.category !== "string" ||
+        !updates.category.trim()
+      ) {
+        return sendError(res, 400, "Category cannot be empty.");
+      }
+
+      updates.category = updates.category.trim();
+    }
+
+    if (updates.note !== undefined) {
+      if (typeof updates.note !== "string") {
+        return sendError(res, 400, "Note must be text.");
+      }
+
+      updates.note = updates.note.trim();
+    }
+
+    if (updates.amount !== undefined) {
+      if (
+        updates.amount === "" ||
+        updates.amount === null ||
+        !Number.isFinite(Number(updates.amount)) ||
+        Number(updates.amount) <= 0
+      ) {
+        return sendError(res, 400, "Amount must be greater than zero.");
+      }
+
+      updates.amount = Number(updates.amount);
+    }
+
+    if (
+      updates.frequency !== undefined &&
+      !validFrequencies.includes(updates.frequency)
+    ) {
+      return sendError(res, 400, "Invalid frequency.");
+    }
+
+    if (
+      updates.type !== undefined &&
+      !validTypes.includes(updates.type)
+    ) {
+      return sendError(res, 400, "Invalid transaction type.");
+    }
+
+    for (const field of ["nextDueDate", "endDate"]) {
+      if (updates[field] === undefined) continue;
+
+      if (updates[field] === null || updates[field] === "") {
+        if (field === "endDate") {
+          updates[field] = null;
+          continue;
+        }
+
+        return sendError(res, 400, "Next due date is required.");
+      }
+
+      const parsedDate = new Date(updates[field]);
+
+      if (Number.isNaN(parsedDate.getTime())) {
+        return sendError(res, 400, `Invalid ${field}.`);
+      }
+
+      updates[field] = parsedDate;
+    }
+
+    if (
+      updates.isActive !== undefined &&
+      typeof updates.isActive !== "boolean"
+    ) {
+      return sendError(res, 400, "isActive must be true or false.");
+    }
+
+    const existing = await RecurringTransaction.findOne({
+      _id: id,
+      user: userId,
+    });
+
+    if (!existing) {
+      return sendError(res, 404, "Recurring transaction not found.");
+    }
+
+    const resultingNextDueDate =
+      updates.nextDueDate || existing.nextDueDate;
+
+    const resultingEndDate =
+      updates.endDate !== undefined
+        ? updates.endDate
+        : existing.endDate;
+
+    if (
+      resultingEndDate &&
+      resultingNextDueDate > resultingEndDate
+    ) {
+      return sendError(
+        res,
+        400,
+        "Next due date cannot be after the end date."
+      );
+    }
+
+    const record = await RecurringTransaction.findOneAndUpdate(
+      { _id: id, user: userId },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Recurring transaction updated successfully.",
+      record,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/recurring-transactions/:id
+exports.deleteRecurringTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return sendError(res, 401, "Please log in again.");
+    }
+
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return sendError(res, 400, "Invalid recurring transaction ID.");
+    }
+
+    const record = await RecurringTransaction.findOneAndDelete({
+      _id: id,
+      user: userId,
+    });
+
+    if (!record) {
+      return sendError(res, 404, "Recurring transaction not found.");
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Recurring schedule deleted. Existing transactions were kept.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /api/recurring-transactions/:id/paid
+exports.markRecurringPaid = async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return sendError(res, 401, "Please log in again.");
+    }
+
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return sendError(res, 400, "Invalid recurring transaction ID.");
+    }
+
+    const record = await RecurringTransaction.findOne({
+      _id: id,
+      user: userId,
+    });
+
+    if (!record) {
+      return sendError(res, 404, "Recurring transaction not found.");
+    }
+
+    if (!record.isActive) {
+      return sendError(res, 400, "This recurring schedule is paused.");
+    }
+
+    const dueDate = new Date(record.nextDueDate);
+
+    if (Number.isNaN(dueDate.getTime())) {
+      return sendError(res, 400, "The recurring schedule has an invalid due date.");
+    }
+
+    if (record.endDate && dueDate > new Date(record.endDate)) {
+      await RecurringTransaction.updateOne(
+        { _id: record._id, user: userId, nextDueDate: record.nextDueDate },
+        { $set: { isActive: false } }
+      );
+
+      return sendError(res, 400, "This recurring schedule has ended.");
+    }
+
+    const occurrenceKey =
+      `${record._id}:${dueDate.toISOString().slice(0, 10)}`;
+
+    let transaction;
+
+    try {
+      transaction = await Transaction.findOneAndUpdate(
+        { user: userId, occurrenceKey },
+        {
+          $setOnInsert: {
+            user: userId,
+            title: record.title,
+            amount: record.amount,
+            type: record.type,
+            category: record.category,
+            date: dueDate,
+            note: record.note || "",
+            recurringId: record._id,
+            occurrenceKey,
+          },
+        },
+        { new: true, upsert: true, runValidators: true }
+      );
+    } catch (error) {
+      if (error.code === 11000) {
+        transaction = await Transaction.findOne({
+          user: userId,
+          occurrenceKey,
+        });
+      }
+
+      if (!transaction) throw error;
+    }
+
+    const nextDueDate = getNextDueDate(dueDate, record.frequency);
+
+    const updates = {
+      lastGeneratedDate: dueDate,
+      nextDueDate,
+    };
+
+    if (record.endDate && nextDueDate > new Date(record.endDate)) {
+      updates.isActive = false;
+    }
+
+    const updatedRecord = await RecurringTransaction.findOneAndUpdate(
+      {
+        _id: record._id,
+        user: userId,
+        nextDueDate: record.nextDueDate,
+        isActive: true,
+      },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedRecord) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This payment was already processed or the schedule changed. Refresh and check the latest status.",
+        transaction,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment recorded and next due date updated.",
+      transaction,
+      record: updatedRecord,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+==================================================
+FILE: controllers/reportController.js
+==================================================
+
+const mongoose = require("mongoose");
+const Transaction = require("../models/Transaction");
+
+const VALID_PERIODS = [
+  "thisMonth",
+  "lastMonth",
+  "last3Months",
+  "thisYear",
+  "allTime",
+];
+
+// Convert an IST calendar date to its UTC Date equivalent.
+function istDateToUTC(year, month, day) {
+  return new Date(Date.UTC(year, month - 1, day) - 330 * 60 * 1000);
+}
+
+// Get today's calendar date in India.
+function getISTToday() {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+
+  const values = {};
+
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      values[part.type] = Number(part.value);
+    }
+  });
+
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+  };
+}
+
+// Build a date filter for the selected reporting period.
+function getPeriodDateFilter(period) {
+  if (!VALID_PERIODS.includes(period)) {
+    return { error: true };
+  }
+
+  if (period === "allTime") {
+    return { filter: null };
+  }
+
+  const { year, month } = getISTToday();
+
+  let start;
+  let end;
+
+  switch (period) {
+    case "thisMonth":
+      start = istDateToUTC(year, month, 1);
+      end =
+        month === 12
+          ? istDateToUTC(year + 1, 1, 1)
+          : istDateToUTC(year, month + 1, 1);
+      break;
+
+    case "lastMonth": {
+      const previousMonth = new Date(
+        Date.UTC(year, month - 2, 1)
+      );
+
+      const previousYear = previousMonth.getUTCFullYear();
+      const previousMonthNumber =
+        previousMonth.getUTCMonth() + 1;
+
+      start = istDateToUTC(
+        previousYear,
+        previousMonthNumber,
+        1
+      );
+      end = istDateToUTC(year, month, 1);
+      break;
+    }
+
+    case "last3Months": {
+      const threeMonthStart = new Date(
+        Date.UTC(year, month - 3, 1)
+      );
+
+      start = istDateToUTC(
+        threeMonthStart.getUTCFullYear(),
+        threeMonthStart.getUTCMonth() + 1,
+        1
+      );
+
+      end =
+        month === 12
+          ? istDateToUTC(year + 1, 1, 1)
+          : istDateToUTC(year, month + 1, 1);
+      break;
+    }
+
+    case "thisYear":
+      start = istDateToUTC(year, 1, 1);
+      end = istDateToUTC(year + 1, 1, 1);
+      break;
+
+    default:
+      return { error: true };
+  }
+
+  return {
+    filter: {
+      $gte: start,
+      $lt: end,
+    },
+  };
+}
+
+function getUserId(req, res) {
+  const userId = req.user?.id || req.user?._id;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required. Please log in again.",
+    });
+
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(userId);
+}
+
+function getReportFilter(req, res) {
+  const period = req.query.period || "allTime";
+  const result = getPeriodDateFilter(period);
+
+  if (result.error) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid report period.",
+      allowedPeriods: VALID_PERIODS,
+    });
+
+    return null;
+  }
+
+  return result.filter;
+}
+
+// GET /api/report
+const getDashboardReport = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const dateFilter = getReportFilter(req, res);
+    if (dateFilter === null && req.query.period &&
+        req.query.period !== "allTime") return;
+
+    const match = { user: userId };
+
+    if (dateFilter) {
+      match.date = dateFilter;
+    }
+
+    const [result] = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalIncome: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "income"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          totalExpense: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "expense"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          transactionCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const totalIncome = result?.totalIncome || 0;
+    const totalExpense = result?.totalExpense || 0;
+
+    return res.status(200).json({
+      success: true,
+      period: req.query.period || "allTime",
+      report: {
+        totalIncome,
+        totalExpense,
+        balance: totalIncome - totalExpense,
+        transactionCount: result?.transactionCount || 0,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/report/category
+const getCategoryReport = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const dateFilter = getReportFilter(req, res);
+    if (dateFilter === null && req.query.period &&
+        req.query.period !== "allTime") return;
+
+    const match = {
+      user: userId,
+      type: "expense",
+    };
+
+    if (dateFilter) {
+      match.date = dateFilter;
+    }
+
+    const categories = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: ["$category", null] },
+                  {
+                    $eq: [
+                      { $trim: { input: "$category" } },
+                      "",
+                    ],
+                  },
+                ],
+              },
+              "Other",
+              { $trim: { input: "$category" } },
+            ],
+          },
+          total: { $sum: "$amount" },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: "$_id",
+          total: 1,
+          transactionCount: 1,
+        },
+      },
+      { $sort: { total: -1 } },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      period: req.query.period || "allTime",
+      categories,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/report/monthly
+const getMonthlyReport = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const dateFilter = getReportFilter(req, res);
+    if (dateFilter === null && req.query.period &&
+        req.query.period !== "allTime") return;
+
+    const match = {
+      user: userId,
+      date: { $type: "date" },
+    };
+
+    if (dateFilter) {
+      match.date = {
+        ...match.date,
+        ...dateFilter,
+      };
+    }
+
+    const monthlyReports = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            year: {
+              $year: {
+                date: "$date",
+                timezone: "Asia/Kolkata",
+              },
+            },
+            month: {
+              $month: {
+                date: "$date",
+                timezone: "Asia/Kolkata",
+              },
+            },
+          },
+          income: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "income"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          expense: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "expense"] },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          month: {
+            $concat: [
+              { $toString: "$_id.year" },
+              "-",
+              {
+                $cond: [
+                  { $lt: ["$_id.month", 10] },
+                  {
+                    $concat: [
+                      "0",
+                      { $toString: "$_id.month" },
+                    ],
+                  },
+                  { $toString: "$_id.month" },
+                ],
+              },
+            ],
+          },
+          income: 1,
+          expense: 1,
+          balance: {
+            $subtract: ["$income", "$expense"],
+          },
+          transactionCount: 1,
+        },
+      },
+      { $sort: { month: 1 } },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      period: req.query.period || "allTime",
+      monthlyReports,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getDashboardReport,
+  getCategoryReport,
+  getMonthlyReport,
+};
+
+
+==================================================
+FILE: controllers/savingController.js
+==================================================
+
+const mongoose = require("mongoose");
+const Saving = require("../models/saving");
+
+// GET /api/saving-goals
+const getSavingGoals = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const goals = await Saving.find({ user: userId }).sort({
+      createdAt: -1,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: goals.length,
+      goals,
+    });
+  } catch (error) {
+    console.error("Get saving goals error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch saving goals",
+    });
+  }
+};
+
+// POST /api/saving-goals
+const createSavingGoal = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { name, target, saved = 0, deadline } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!name?.trim() || target === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Goal name and target amount are required",
+      });
+    }
+
+    const targetAmount = Number(target);
+    const savedAmount = Number(saved);
+
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Target must be greater than zero",
+      });
+    }
+
+    if (
+      !Number.isFinite(savedAmount) ||
+      savedAmount < 0 ||
+      savedAmount > targetAmount
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Saved amount must be between zero and target",
+      });
+    }
+
+    let parsedDeadline = null;
+
+    if (deadline) {
+      parsedDeadline = new Date(deadline);
+
+      if (Number.isNaN(parsedDeadline.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid deadline",
+        });
+      }
+    }
+
+    const goal = await Saving.create({
+      user: userId,
+      name: name.trim(),
+      target: targetAmount,
+      saved: savedAmount,
+      deadline: parsedDeadline,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Saving goal created successfully",
+      goal,
+    });
+  } catch (error) {
+    console.error("Create saving goal error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create saving goal",
+    });
+  }
+};
+
+// PUT /api/saving-goals/:id
+const updateSavingGoal = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+    const { name, target, saved, deadline } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid saving goal ID",
+      });
+    }
+
+    const goal = await Saving.findOne({ _id: id, user: userId });
+
+    if (!goal) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving goal not found",
+      });
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Goal name cannot be empty",
+        });
+      }
+      goal.name = name.trim();
+    }
+
+    if (target !== undefined) {
+      const amount = Number(target);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Target must be greater than zero",
+        });
+      }
+      goal.target = amount;
+    }
+
+    if (saved !== undefined) {
+      const amount = Number(saved);
+
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Saved amount cannot be negative",
+        });
+      }
+      goal.saved = amount;
+    }
+
+    if (goal.saved > goal.target) {
+      return res.status(400).json({
+        success: false,
+        message: "Saved amount cannot exceed the target",
+      });
+    }
+
+    if (deadline !== undefined) {
+      if (deadline === null || deadline === "") {
+        goal.deadline = null;
+      } else {
+        const parsedDeadline = new Date(deadline);
+
+        if (Number.isNaN(parsedDeadline.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid deadline",
+          });
+        }
+
+        goal.deadline = parsedDeadline;
+      }
+    }
+
+    await goal.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Saving goal updated successfully",
+      goal,
+    });
+  } catch (error) {
+    console.error("Update saving goal error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update saving goal",
+    });
+  }
+};
+
+// DELETE /api/saving-goals/:id
+const deleteSavingGoal = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid saving goal ID",
+      });
+    }
+
+    const goal = await Saving.findOneAndDelete({
+      _id: id,
+      user: userId,
+    });
+
+    if (!goal) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving goal not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Saving goal deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete saving goal error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete saving goal",
+    });
+  }
+};
+
+module.exports = {
+  getSavingGoals,
+  createSavingGoal,
+  updateSavingGoal,
+  deleteSavingGoal,
+};
+
+
+==================================================
+FILE: controllers/sharedExpenseController.js
+==================================================
+const mongoose = require("mongoose");
+const User = require("../models/user");
+const SharedGroup = require("../models/SharedGroup");
+const SharedExpense = require("../models/SharedExpense");
+const Settlement = require("../models/Settlement");
+
+const roundMoney = (value) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const getUserId = (req) => req.user?.id || req.user?._id;
+
+async function getMemberGroup(groupId, userId) {
+  if (!mongoose.isValidObjectId(groupId)) return null;
+
+  return SharedGroup.findOne({
+    _id: groupId,
+    members: userId,
+  });
+}
+
+function requireUser(req, res) {
+  const userId = getUserId(req);
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required. Please log in again.",
+    });
+    return null;
+  }
+
+  return userId;
+}
+
+exports.createGroup = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const name = String(req.body.name || "").trim();
+    const description = String(req.body.description || "").trim();
+    const emails = Array.isArray(req.body.memberEmails)
+      ? req.body.memberEmails
+      : [];
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Group name is required.",
+      });
+    }
+
+    const normalizedEmails = [
+      ...new Set(
+        emails
+          .map((email) => String(email).trim().toLowerCase())
+          .filter(Boolean)
+      ),
+    ];
+
+    const users = normalizedEmails.length
+      ? await User.find({
+          email: { $in: normalizedEmails },
+        }).select("_id email")
+      : [];
+
+    const foundEmails = new Set(
+      users.map((user) => user.email.toLowerCase())
+    );
+
+    const missingEmails = normalizedEmails.filter(
+      (email) => !foundEmails.has(email)
+    );
+
+    if (missingEmails.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Some emails are not registered.",
+        missingEmails,
+      });
+    }
+
+    const members = [
+      ...new Set([
+        String(userId),
+        ...users.map((user) => String(user._id)),
+      ]),
+    ];
+
+    const group = await SharedGroup.create({
+      name,
+      description,
+      createdBy: userId,
+      members,
+    });
+
+    const populated = await SharedGroup.findById(group._id)
+      .populate("createdBy", "name email")
+      .populate("members", "name email");
+
+    return res.status(201).json({
+      success: true,
+      group: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getGroups = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const groups = await SharedGroup.find({
+      members: userId,
+    })
+      .populate("createdBy", "name email")
+      .populate("members", "name email")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      groups,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createSharedExpense = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const {
+      groupId,
+      title,
+      totalAmount,
+      paidBy,
+      category,
+      date,
+      splitType,
+      splits,
+      note,
+    } = req.body;
+
+    const amount = Number(totalAmount);
+
+    if (!mongoose.isValidObjectId(groupId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid groupId is required.",
+      });
+    }
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      totalAmount === "" ||
+      totalAmount === null ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and a positive total amount are required.",
+      });
+    }
+
+    if (!["equal", "custom", "percentage"].includes(splitType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid split type.",
+      });
+    }
+
+    let expenseDate = new Date();
+
+    if (date !== undefined && date !== null && date !== "") {
+      expenseDate = new Date(date);
+
+      if (Number.isNaN(expenseDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid expense date.",
+        });
+      }
+    }
+
+    const group = await getMemberGroup(groupId, userId);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
+      });
+    }
+
+    const payerId = String(paidBy || userId);
+    const memberIds = group.members.map((member) => String(member));
+
+    if (!memberIds.includes(payerId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Payer must belong to this group.",
+      });
+    }
+
+    let calculatedSplits = [];
+
+    if (splitType === "equal") {
+      const baseCents = Math.floor(
+        Math.round(amount * 100) / memberIds.length
+      );
+
+      let remainingCents =
+        Math.round(amount * 100) - baseCents * memberIds.length;
+
+      calculatedSplits = memberIds.map((memberId) => {
+        const extraCent = remainingCents > 0 ? 1 : 0;
+        remainingCents -= extraCent;
+
+        return {
+          user: memberId,
+          amount: (baseCents + extraCent) / 100,
+          percentage: null,
+        };
+      });
+    } else {
+      if (
+        !Array.isArray(splits) ||
+        splits.length !== memberIds.length
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Provide a split for every group member.",
+        });
+      }
+
+      const suppliedIds = splits.map((split) => String(split.user));
+      const uniqueIds = new Set(suppliedIds);
+
+      if (
+        uniqueIds.size !== memberIds.length ||
+        !memberIds.every((id) => uniqueIds.has(id))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Each group member must appear exactly once in splits.",
+        });
+      }
+
+      if (splitType === "custom") {
+        const invalidAmount = splits.some(
+          (split) =>
+            split.amount === "" ||
+            split.amount === null ||
+            split.amount === undefined ||
+            !Number.isFinite(Number(split.amount)) ||
+            Number(split.amount) < 0
+        );
+
+        if (invalidAmount) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid custom split amount.",
+          });
+        }
+
+        calculatedSplits = splits.map((split) => ({
+          user: String(split.user),
+          amount: roundMoney(Number(split.amount)),
+          percentage: null,
+        }));
+
+        const splitTotal = roundMoney(
+          calculatedSplits.reduce(
+            (sum, split) => sum + split.amount,
+            0
+          )
+        );
+
+        if (splitTotal !== roundMoney(amount)) {
+          return res.status(400).json({
+            success: false,
+            message: "Custom split amounts must equal the total.",
+            splitTotal,
+            totalAmount: roundMoney(amount),
+          });
+        }
+      } else {
+        const invalidPercentage = splits.some((split) => {
+          if (
+            split.percentage === "" ||
+            split.percentage === null ||
+            split.percentage === undefined
+          ) {
+            return true;
+          }
+
+          const percentage = Number(split.percentage);
+
+          return (
+            !Number.isFinite(percentage) ||
+            percentage < 0 ||
+            percentage > 100
+          );
+        });
+
+        if (invalidPercentage) {
+          return res.status(400).json({
+            success: false,
+            message: "Each percentage must be between 0 and 100.",
+          });
+        }
+
+        const percentageTotal = roundMoney(
+          splits.reduce(
+            (sum, split) => sum + Number(split.percentage),
+            0
+          )
+        );
+
+        if (percentageTotal !== 100) {
+          return res.status(400).json({
+            success: false,
+            message: "Percentages must add up to exactly 100%.",
+            percentageTotal,
+          });
+        }
+
+        calculatedSplits = splits.map((split) => ({
+          user: String(split.user),
+          percentage: Number(split.percentage),
+          amount: roundMoney(
+            (amount * Number(split.percentage)) / 100
+          ),
+        }));
+
+        const difference = roundMoney(
+          amount -
+            calculatedSplits.reduce(
+              (sum, split) => sum + split.amount,
+              0
+            )
+        );
+
+        calculatedSplits[calculatedSplits.length - 1].amount =
+          roundMoney(
+            calculatedSplits[calculatedSplits.length - 1].amount +
+              difference
+          );
+      }
+    }
+
+    const expense = await SharedExpense.create({
+      group: group._id,
+      createdBy: userId,
+      paidBy: payerId,
+      title: title.trim(),
+      totalAmount: roundMoney(amount),
+      category: category || "Other",
+      date: expenseDate,
+      splitType,
+      splits: calculatedSplits,
+      note: typeof note === "string" ? note.trim() : "",
+    });
+
+    const populated = await SharedExpense.findById(expense._id)
+      .populate("paidBy", "name email")
+      .populate("createdBy", "name email")
+      .populate("splits.user", "name email");
+
+    return res.status(201).json({
+      success: true,
+      expense: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getGroupExpenses = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const group = await getMemberGroup(req.params.groupId, userId);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
+      });
+    }
+
+    const expenses = await SharedExpense.find({
+      group: group._id,
+    })
+      .populate("paidBy", "name email")
+      .populate("createdBy", "name email")
+      .populate("splits.user", "name email")
+      .sort({ date: -1, createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      expenses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getGroupBalances = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const group = await getMemberGroup(req.params.groupId, userId);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found.",
+      });
+    }
+
+    const [expenses, settlements] = await Promise.all([
+      SharedExpense.find({ group: group._id }),
+      Settlement.find({ group: group._id }),
+    ]);
+
+    const balances = new Map(
+      group.members.map((member) => [String(member), 0])
+    );
+
+    for (const expense of expenses) {
+      const payerId = String(expense.paidBy);
+
+      balances.set(
+        payerId,
+        roundMoney(
+          (balances.get(payerId) || 0) + expense.totalAmount
+        )
+      );
+
+      for (const split of expense.splits) {
+        const memberId = String(split.user);
+
+        balances.set(
+          memberId,
+          roundMoney(
+            (balances.get(memberId) || 0) - split.amount
+          )
+        );
+      }
+    }
+
+    for (const settlement of settlements) {
+      const fromId = String(settlement.from);
+      const toId = String(settlement.to);
+
+      balances.set(
+        fromId,
+        roundMoney(
+          (balances.get(fromId) || 0) + settlement.amount
+        )
+      );
+
+      balances.set(
+        toId,
+        roundMoney(
+          (balances.get(toId) || 0) - settlement.amount
+        )
+      );
+    }
+
+    const members = await User.find({
+      _id: { $in: group.members },
+    }).select("name email");
+
+    const result = members.map((member) => ({
+      user: member,
+      balance: roundMoney(
+        balances.get(String(member._id)) || 0
+      ),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      balances: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createSettlement = async (req, res, next) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const { groupId, to, amount, note } = req.body;
+    const value = Number(amount);
+
+    if (
+      !mongoose.isValidObjectId(groupId) ||
+      !mongoose.isValidObjectId(to)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid group or recipient.",
+      });
+    }
+
+    if (
+      amount === "" ||
+      amount === null ||
+      !Number.isFinite(value) ||
+      value <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must be positive.",
+      });
+    }
+
+    if (String(userId) === String(to)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot settle with yourself.",
+      });
+    }
+
+    const group = await getMemberGroup(groupId, userId);
+
+    if (
+      !group ||
+      !group.members.some((member) => String(member) === String(to))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Group or recipient not found.",
+      });
+    }
+
+    const settlement = await Settlement.create({
+      group: group._id,
+      from: userId,
+      to,
+      amount: roundMoney(value),
+      note: typeof note === "string" ? note.trim() : "",
+    });
+
+    const populated = await Settlement.findById(settlement._id)
+      .populate("from", "name email")
+      .populate("to", "name email");
+
+    return res.status(201).json({
+      success: true,
+      settlement: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+==================================================
+FILE: controllers/transactionController.js
+==================================================
+const Transaction = require("../models/Transaction");
+const mongoose = require("mongoose");
+
+const getUserId = (req, res) => {
+  const userId = req.user?.id || req.user?._id;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    res.status(401).json({
+      success: false,
+      message: "Invalid user session. Please log in again.",
+    });
+    return null;
+  }
+
+  return userId;
+};
+
+const getTransactions = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const transactions = await Transaction.find({
+      user: userId,
+    }).sort({ date: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: transactions.length,
+      transactions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getTransactionsById = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID.",
+      });
+    }
+
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      user: userId,
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      transaction,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const addTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const { title, amount, type, category, date, note } = req.body;
+
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      amount === undefined ||
+      amount === null ||
+      amount === "" ||
+      !["income", "expense"].includes(type) ||
+      typeof category !== "string" ||
+      !category.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid title, amount, type and category are required.",
+      });
+    }
+
+    const numericAmount = Number(amount);
+
+    if (!Number.isFinite(numericAmount) || numericAmount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must be a valid non-negative number.",
+      });
+    }
+
+    const transactionDate = date ? new Date(date) : new Date();
+
+    if (Number.isNaN(transactionDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction date.",
+      });
+    }
+
+    const transaction = await Transaction.create({
+      title: title.trim(),
+      amount: numericAmount,
+      type,
+      category: category.trim(),
+      date: transactionDate,
+      note: typeof note === "string" ? note.trim() : "",
+      user: userId,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Transaction created successfully.",
+      transaction,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID.",
+      });
+    }
+
+    const allowedFields = [
+      "title",
+      "amount",
+      "type",
+      "category",
+      "date",
+      "note",
+    ];
+
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (updates.title !== undefined) {
+      if (typeof updates.title !== "string" || !updates.title.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Title cannot be empty.",
+        });
+      }
+
+      updates.title = updates.title.trim();
+    }
+
+    if (updates.amount !== undefined) {
+      if (updates.amount === "" || updates.amount === null) {
+        return res.status(400).json({
+          success: false,
+          message: "Amount is required.",
+        });
+      }
+
+      updates.amount = Number(updates.amount);
+
+      if (!Number.isFinite(updates.amount) || updates.amount < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Amount must be a valid non-negative number.",
+        });
+      }
+    }
+
+    if (
+      updates.type !== undefined &&
+      !["income", "expense"].includes(updates.type)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction type.",
+      });
+    }
+
+    if (updates.category !== undefined) {
+      if (
+        typeof updates.category !== "string" ||
+        !updates.category.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Category cannot be empty.",
+        });
+      }
+
+      updates.category = updates.category.trim();
+    }
+
+    if (updates.date !== undefined) {
+      const parsedDate = new Date(updates.date);
+
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid transaction date.",
+        });
+      }
+
+      updates.date = parsedDate;
+    }
+
+    if (updates.note !== undefined && typeof updates.note !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Note must be text.",
+      });
+    }
+
+    if (updates.note !== undefined) {
+      updates.note = updates.note.trim();
+    }
+
+    const transaction = await Transaction.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: userId,
+      },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Transaction updated successfully.",
+      transaction,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteTransactionById = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID.",
+      });
+    }
+
+    const transaction = await Transaction.findOneAndDelete({
+      _id: req.params.id,
+      user: userId,
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Transaction deleted successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteTransaction = async (req, res, next) => {
+  try {
+    const userId = getUserId(req, res);
+    if (!userId) return;
+
+    const result = await Transaction.deleteMany({
+      user: userId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "All transactions deleted successfully.",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  addTransaction,
+  getTransactions,
+  getTransactionsById,
+  updateTransaction,
+  deleteTransactionById,
+  deleteTransaction,
+};
+
+==================================================
+FILE: models/Budget.js
+==================================================
+const mongoose = require("mongoose");
+
+const budgetSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    comment: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    limit: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+    month: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 12,
+    },
+    year: {
+      type: Number,
+      required: true,
+      min: 2000,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+budgetSchema.index(
+  { user: 1, category: 1, month: 1, year: 1 },
+  { unique: true }
+);
+
+module.exports =
+  mongoose.models.Budget || mongoose.model("Budget", budgetSchema);
+
+==================================================
+FILE: models/Category.js
+==================================================
+const mongoose = require("mongoose");
+
+const categorySchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    type: {
+      type: String,
+      enum: ["income", "expense", "both"],
+      default: "expense",
+    },
+    color: {
+      type: String,
+      default: "#2563EB",
+    },
+    icon: {
+      type: String,
+      default: "wallet",
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+categorySchema.index(
+  { user: 1, name: 1, type: 1 },
+  { unique: true }
+);
+
+module.exports =
+  mongoose.models.Category || mongoose.model("Category", categorySchema);
+
+==================================================
+FILE: models/notification.js
+==================================================
+
+const mongoose = require("mongoose");
+
+const notificationSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
+    },
+
+    message: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 1000,
+    },
+
+    type: {
+      type: String,
+      enum: [
+        "info",
+        "success",
+        "warning",
+        "budget",
+        "transaction",
+        "saving",
+        "security",
+        "otp",
+      ],
+      default: "info",
+    },
+
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+
+    link: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+notificationSchema.index({
+  user: 1,
+  isRead: 1,
+  createdAt: -1,
+});
+
+notificationSchema.index(
+  { expiresAt: 1 },
+  {
+    expireAfterSeconds: 0,
+    partialFilterExpression: {
+      expiresAt: { $type: "date" },
+    },
+  }
+);
+
+module.exports =
+  mongoose.models.Notification ||
+  mongoose.model("Notification", notificationSchema);
+
+
+==================================================
+FILE: models/RecurringTransaction.js
+==================================================
+const mongoose = require("mongoose");
+
+const recurringTransactionSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+    type: {
+      type: String,
+      enum: ["income", "expense"],
+      required: true,
+    },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    frequency: {
+      type: String,
+      enum: ["weekly", "monthly", "yearly"],
+      default: "monthly",
+    },
+    startDate: {
+      type: Date,
+      required: true,
+    },
+    nextDueDate: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+    endDate: {
+      type: Date,
+      default: null,
+    },
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    lastGeneratedDate: {
+      type: Date,
+      default: null,
+    },
+  },
+  { timestamps: true }
+);
+
+recurringTransactionSchema.index({
+  user: 1,
+  isActive: 1,
+  nextDueDate: 1,
+});
+
+module.exports =
+  mongoose.models.RecurringTransaction ||
+  mongoose.model("RecurringTransaction", recurringTransactionSchema);
+
+==================================================
+FILE: models/saving.js
+==================================================
+const mongoose = require("mongoose");
+
+const savingSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+    },
+
+    target: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    saved: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: {
+        validator(value) {
+          return value <= this.target;
+        },
+        message: "Saved amount cannot exceed the target.",
+      },
+    },
+
+    deadline: {
+      type: Date,
+      default: null,
+    },
+
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+savingSchema.index({ user: 1, createdAt: -1 });
+
+module.exports =
+  mongoose.models.Saving || mongoose.model("Saving", savingSchema);
+
+==================================================
+FILE: models/Settlement.js
+==================================================
+const mongoose = require("mongoose");
+
+const settlementSchema = new mongoose.Schema(
+  {
+    group: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SharedGroup",
+      required: true,
+      index: true,
+    },
+
+    from: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    to: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
+  },
+  { timestamps: true }
+);
+
+settlementSchema.pre("validate", function (next) {
+  if (this.from && this.to && this.from.equals(this.to)) {
+    this.invalidate("to", "Payer and receiver must be different users.");
+  }
+  next();
+});
+
+settlementSchema.index({ group: 1, date: -1 });
+
+module.exports =
+  mongoose.models.Settlement ||
+  mongoose.model("Settlement", settlementSchema);
+
+==================================================
+FILE: models/SharedExpense.js
+==================================================
+
+const mongoose = require("mongoose");
+
+const splitSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    percentage: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+  },
+  { _id: false }
+);
+
+const sharedExpenseSchema = new mongoose.Schema(
+  {
+    group: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SharedGroup",
+      required: true,
+      index: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    paidBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+    totalAmount: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+    category: {
+      type: String,
+      default: "Other",
+      trim: true,
+    },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+    splitType: {
+      type: String,
+      enum: ["equal", "custom", "percentage"],
+      required: true,
+    },
+    splits: {
+      type: [splitSchema],
+      required: true,
+    },
+    note: {
+      type: String,
+      default: "",
+    },
+  },
+  { timestamps: true }
+);
+
+sharedExpenseSchema.index({ group: 1, date: -1 });
+
+module.exports =
+  mongoose.models.SharedExpense ||
+  mongoose.model("SharedExpense", sharedExpenseSchema);
+
+
+==================================================
+FILE: models/SharedGroup.js
+==================================================
+
+const mongoose = require("mongoose");
+
+const sharedGroupSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 80,
+    },
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+sharedGroupSchema.index({ members: 1, createdAt: -1 });
+
+module.exports =
+  mongoose.models.SharedGroup ||
+  mongoose.model("SharedGroup", sharedGroupSchema);
+
+
+==================================================
+FILE: models/Transaction.js
+==================================================
+const mongoose = require("mongoose");
+
+const transactionSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+    type: {
+      type: String,
+      enum: ["income", "expense"],
+      required: true,
+    },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 60,
+    },
+    date: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1000,
+    },
+    recurringId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RecurringTransaction",
+      default: undefined,
+    },
+    occurrenceKey: {
+      type: String,
+      default: undefined,
+    },
+  },
+  { timestamps: true }
+);
+
+transactionSchema.index(
+  { user: 1, occurrenceKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      occurrenceKey: { $type: "string" },
+    },
+  }
+);
+
+module.exports =
+  mongoose.models.Transaction ||
+  mongoose.model("Transaction", transactionSchema);
+
+==================================================
+FILE: models/user.js
+==================================================
+
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Name is required"],
+      trim: true,
+      maxlength: 100,
+    },
+
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [/^\S+@\S+\.\S+$/, "Please enter a valid email"],
+    },
+
+    number: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 20,
+    },
+
+    password: {
+      type: String,
+      required: [true, "Password is required"],
+      minlength: 8,
+      select: false,
+    },
+
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+module.exports =
+  mongoose.models.User || mongoose.model("User", userSchema);
+
+
+==================================================
+FILE: middleware/auth.js
+==================================================
+
+const jwt = require("jsonwebtoken");
+
+const authMiddleware = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required. Please log in.",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT_SECRET is missing in server .env",
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+    };
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message:
+        error.name === "TokenExpiredError"
+          ? "Session expired. Please log in again."
+          : "Invalid authentication token.",
+    });
+  }
+};
+
+module.exports = authMiddleware;
+
+
+==================================================
+FILE: middleware/error.js
+==================================================
+const errorHandler = (err, req, res, next) => {
+  console.error("Error:", err.message);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  let statusCode = err.statusCode || err.status || 500;
+  let message = err.message || "Internal server error";
+
+  // Mongoose validation error
+  if (err.name === "ValidationError") {
+    statusCode = 400;
+    message = Object.values(err.errors)
+      .map((item) => item.message)
+      .join(", ");
+  }
+
+  // Invalid MongoDB ID
+  if (err.name === "CastError") {
+    statusCode = 400;
+    message = "Invalid ID or data format";
+  }
+
+  // Duplicate record
+  if (err.code === 11000) {
+    statusCode = 409;
+    message = "This record already exists";
+  }
+
+  // Hide internal server details from clients
+  if (statusCode >= 500) {
+    message = "Internal server error";
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    message,
+  });
+};
+
+module.exports = errorHandler;
+4
+
+==================================================
+FILE: middleware/notfound.js
+==================================================
+
+const notFound = (req, res, next) => {
+  const error = new Error(
+    `Route not found: ${req.method} ${req.originalUrl}`
+  );
+
+  error.statusCode = 404;
+
+  next(error);
+};
+
+module.exports = notFound;
+
+
+==================================================
+FILE: middleware/validate.js
+==================================================
+const validate = (schema) => {
+  return (req, res, next) => {
+    try {
+      if (!schema || typeof schema.validate !== "function") {
+        return res.status(500).json({
+          success: false,
+          message: "Invalid validation schema configuration",
+        });
+      }
+
+      const result = schema.validate(req.body, {
+        abortEarly: false,
+        stripUnknown: true,
+      });
+
+      if (result.error) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.details.map(
+            (detail) => detail.message
+          ),
+        });
+      }
+
+      req.body = result.value;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+};
+
+module.exports = validate;
+
+==================================================
+FILE: utlils/aggregations.js
+==================================================
+const getmonth = (month, year) => {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59, 999);
+
+  return { start, end };
+};
+
+const currentmonth = () => {
+  const now = new Date();
+  return getmonth(now.getMonth() + 1, now.getFullYear());
+};
+
+const format = (amount, currency = "INR") => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency,
+  }).format(amount);
+};
+
+const saving = (income, expense) => {
+  if (income === 0) return 0;
+  return Math.round(((income - expense) / income) * 100);
+};
+
+const getLastmonth = (n = 6) => {
+  const months = [];
+  const now = new Date();
+
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(
+      now.getFullYear(),
+      now.getMonth() - i,
+      1
+    );
+
+    months.push({
+      month: d.getMonth() + 1,
+      year: d.getFullYear(),
+    });
+  }
+
+  return months;
+};
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+module.exports = {
+  getmonth,
+  currentmonth,
+  format,
+  saving,
+  getLastmonth,
+  MONTH_NAMES,
+};
+
+==================================================
+FILE: utlils/cronJobs.js
+==================================================
+const cron = require("node-cron");
+const Transaction = require("../models/Transaction");
+
+module.exports.startCron = () => {
+
+  // Every month on the 1st at 12:00 AM
+  cron.schedule("0 0 1 * *", async () => {
+
+    try {
+
+      // Find all recurring transactions
+      const recurringTransactions = await Transaction.find({
+        isRecurring: true,
+      });
+
+      // Loop through all recurring transactions
+      for (const transaction of recurringTransactions) {
+
+        // Create a new transaction
+        const newTransaction = new Transaction({
+          amount: transaction.amount,
+          type: transaction.type,
+          category: transaction.category,
+          date: new Date(),
+          note: transaction.note,
+          isRecurring: transaction.isRecurring,
+          recurringInterval: transaction.recurringInterval,
+        });
+
+        // Save transaction
+        await newTransaction.save();
+      }
+
+      console.log("✅ Recurring Transactions Added Successfully");
+
+    } catch (err) {
+
+      console.log("❌ Cron Job Error");
+      console.log(err.message);
+
+    }
+
+  });
+
+};
+
+==================================================
+FILE: utlils/csvExport.js
+==================================================
+const { Parser } = require("json2csv");
+const Transaction = require("../models/Transaction");
+
+module.exports.exportCSV = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const transactions = await Transaction.find({ user: userId })
+      .select("title amount type category date note")
+      .sort({ date: -1 })
+      .lean();
+
+    const fields = [
+      { label: "Title", value: "title" },
+      { label: "Amount", value: "amount" },
+      { label: "Type", value: "type" },
+      { label: "Category", value: "category" },
+      { label: "Date", value: "date" },
+      { label: "Note", value: "note" },
+    ];
+
+    const parser = new Parser({ fields });
+    const csv = parser.parse(transactions);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="transactions.csv"'
+    );
+
+    return res.status(200).send("\uFEFF" + csv);
+  } catch (error) {
+    return next(error);
+  }
+};
